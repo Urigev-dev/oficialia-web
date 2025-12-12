@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colores institucionales */
+  --color-brand: #8A1E23;        /* Borgoña */
+  --color-brand-700: #6E161A;    /* Borgoña oscuro */
+  --color-accent: #DCA116;       /* Dorado */
+  --color-ink: #2F2F2F;
+
+  /* Grises UI */
+  --color-surface: #FFFFFF;
+  --color-border: #D9D9D9;
+  --color-bg: #F5F6F7;
+
+  /* Tokens UI */
+  --shadow-card: 0 2px 10px rgba(0,0,0,.06);
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+}
