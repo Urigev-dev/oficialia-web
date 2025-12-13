@@ -32,7 +32,7 @@ export default function LoginPage() {
       <div className="bg-surface shadow-[--shadow-card] rounded-[--radius-2xl] p-8 w-full max-w-md">
         <div className="mb-6 text-center">
           <img
-            src="/logo-tapachula.svg"
+            src="/logo-tapachula.jpeg"
             alt="Tapachula"
             className="h-12 mx-auto mb-3"
           />
