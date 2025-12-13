@@ -1,5 +1,5 @@
 // src/routes/AppRouter.tsx
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import LoginPage from "../pages/LoginPage";
@@ -51,7 +51,7 @@ function RequireRole({
 
 function InnerRouter() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         {/* LOGIN */}
         <Route path="/login" element={<LoginPage />} />
@@ -157,7 +157,7 @@ function InnerRouter() {
         {/* CATCH-ALL */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
