@@ -1,207 +1,144 @@
-// src/pages/RequisicionPrint.tsx
+// FILE: src/pages/RequisicionPrint.tsx
 import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useRequisiciones } from "../hooks/useRequisiciones";
 
 export default function RequisicionPrint() {
   const { id } = useParams<{ id: string }>();
   const { requisiciones } = useRequisiciones();
-  const navigate = useNavigate();
-
   const req = requisiciones.find((r) => r.id === id);
 
-  // Lanzar impresión automáticamente al abrir
   useEffect(() => {
-    if (!req || req.estado === "borrador") return;
-    const t = setTimeout(() => {
-      window.print();
-    }, 300);
-    return () => clearTimeout(t);
+    if (req && req.estado !== "borrador") {
+      setTimeout(() => window.print(), 800);
+    }
   }, [req]);
 
-  if (!req) {
-    return (
-      <div className="p-6 text-sm">
-        No se encontró la requisición.{" "}
-        <button
-          type="button"
-          onClick={() => navigate("/mis-requisiciones")}
-          className="underline"
-        >
-          Volver a Mis requisiciones
-        </button>
-      </div>
-    );
-  }
+  if (!req) return <div>Cargando...</div>;
 
-  if (req.estado === "borrador") {
-    return (
-      <div className="p-6 text-sm">
-        Esta requisición está en borrador y no se puede imprimir el formato
-        oficial. Envíala a revisión desde “Mis requisiciones”.
-      </div>
-    );
-  }
+  const items = req.lineas.filter(l => (l.cantidadAutorizada ?? l.cantidad) > 0);
 
   return (
-    <div className="bg-white text-black p-8 max-w-4xl mx-auto text-sm">
-      {/* ENCABEZADO LOGOS + TÍTULO */}
-      <header className="pb-3 mb-4 border-b border-gray-300">
-        <div className="flex items-center justify-between">
-          <img
-            src="/logo-tapachula.jpeg"
-            alt="Tapachula"
-            className="h-16"
-          />
-          <img
-            src="/oficialia.jpeg"
-            alt="Oficialía Mayor"
-            className="h-12"
-          />
+    <div className="bg-white text-black p-8 mx-auto text-[9px] font-sans h-screen w-full max-w-[21.59cm] leading-tight">
+      
+      {/* HEADER OFICIAL: Logos a color */}
+      <header className="flex justify-between items-center mb-4 border-b-2 border-black pb-3">
+        <div className="w-32 flex-shrink-0">
+            {/* FIX: Se quitó 'grayscale' */}
+            <img src="./logo-tapachula.jpeg" alt="Logo" className="w-full object-contain" />
         </div>
-
-        <div className="mt-3 text-center font-semibold text-base tracking-wide">
-          FORMATO DE REQUERIMIENTO
+        <div className="text-center flex-1 px-2">
+            <h1 className="font-black text-base uppercase tracking-widest mb-1">H. Ayuntamiento de Tapachula</h1>
+            <h2 className="font-bold text-[10px] uppercase text-gray-600 tracking-wide">Oficialía Mayor</h2>
+            <div className="mt-2 px-6 py-1 bg-black text-white inline-block font-bold text-[9px] tracking-wider rounded-sm">
+                REQUISICIÓN DE MATERIALES Y SERVICIOS
+            </div>
         </div>
-        <div className="mt-1 text-center text-[11px]">
-          Folio: <span className="font-semibold">{req.folio}</span>
+        <div className="w-32 flex-shrink-0 text-right">
+            {/* FIX: Se quitó 'grayscale' */}
+            <img src="./oficialia.jpeg" alt="Oficialía" className="w-full object-contain mb-2" />
         </div>
       </header>
 
-      {/* BLOQUE SUPERIOR (FECHA / SECRETARÍA / DIRECCIÓN / TIPO) */}
-      <section className="border border-gray-400 mb-4">
-        <div className="grid grid-cols-12 border-b border-gray-400">
-          <div className="col-span-2 bg-gray-100 px-2 py-1 text-[11px] font-semibold">
-            FECHA:
+      {/* DATOS GENERALES */}
+      <div className="border-2 border-black mb-4">
+          <div className="flex border-b border-black">
+              <div className="w-1/4 border-r border-black p-1 bg-gray-100 font-bold flex flex-col justify-center text-center">
+                  <div className="text-[8px] text-gray-500">FECHA DE SOLICITUD</div>
+                  <div className="font-mono text-xs">{req.fecha}</div>
+                  
+                  <div className="mt-2 text-[8px] text-gray-500">FOLIO</div>
+                  <div className="font-black text-sm text-red-800 tracking-wide">{req.folio}</div>
+              </div>
+              
+              <div className="w-3/4 flex flex-col">
+                  <div className="flex border-b border-black h-8 items-center">
+                      <div className="w-28 bg-gray-50 p-1 pl-2 font-bold border-r border-gray-300 text-[8px] uppercase tracking-wide h-full flex items-center">Órgano Requirente:</div>
+                      <div className="flex-1 p-1 pl-2 uppercase font-bold text-[9px]">{req.organoRequirente}</div>
+                  </div>
+                  <div className="flex border-b border-black h-8 items-center">
+                      <div className="w-28 bg-gray-50 p-1 pl-2 font-bold border-r border-gray-300 text-[8px] uppercase tracking-wide h-full flex items-center">Dirección / Área:</div>
+                      <div className="flex-1 p-1 pl-2 uppercase text-[9px]">{req.direccion}</div>
+                  </div>
+                  <div className="flex h-8 items-center">
+                      <div className="w-28 bg-gray-50 p-1 pl-2 font-bold border-r border-gray-300 text-[8px] uppercase tracking-wide h-full flex items-center">Tipo de Material:</div>
+                      <div className="flex-1 p-1 pl-2 uppercase text-[9px] font-medium">{req.tipoMaterial} <span className="text-gray-400 mx-1">|</span> {req.subTipoMaterial}</div>
+                  </div>
+              </div>
           </div>
-          <div className="col-span-10 px-2 py-1 text-[11px]">
-            {req.fecha}
-          </div>
-        </div>
+      </div>
 
-        <div className="grid grid-cols-12 border-b border-gray-400">
-          <div className="col-span-3 bg-gray-100 px-2 py-1 text-[11px] font-semibold">
-            SECRETARÍA O INSTITUTO:
-          </div>
-          <div className="col-span-9 px-2 py-1 text-[11px] uppercase">
-            {req.secretariaNombre}
-          </div>
-        </div>
+      {/* TABLA DE ÍTEMS */}
+      <table className="w-full border-collapse border-2 border-black mb-4">
+          <thead>
+              <tr className="bg-gray-100 text-center font-bold border-b-2 border-black text-[8px] tracking-wider">
+                  <th className="border-r border-black p-1 w-14">CANT.<br/>SOLIC.</th>
+                  <th className="border-r border-black p-1 w-14 bg-gray-200">CANT.<br/>AUT.</th>
+                  <th className="border-r border-black p-1 w-20">UNIDAD</th>
+                  <th className="border-r border-black p-1 w-1/4">CONCEPTO</th>
+                  <th className="p-1">DESCRIPCIÓN</th>
+              </tr>
+          </thead>
+          <tbody>
+              {items.map((l, i) => (
+                  <tr key={i} className="border-b border-gray-300 text-[9px]">
+                      <td className="border-r border-black p-1 text-center align-top pt-2 font-medium">{l.cantidad}</td>
+                      <td className="border-r border-black p-1 text-center align-top pt-2 font-bold bg-gray-50 text-[10px]">
+                        {l.cantidadAutorizada ?? l.cantidad}
+                      </td>
+                      <td className="border-r border-black p-1 text-center uppercase text-[8px] align-top pt-2">{l.unidad}</td>
+                      <td className="border-r border-black p-1 align-top pt-2 px-2">
+                          <span className="font-bold uppercase tracking-tight">{l.concepto}</span>
+                      </td>
+                      <td className="p-1 align-top pt-2 px-2">
+                          <span className="uppercase text-gray-600 text-[8px]">{l.descripcion}</span>
+                      </td>
+                  </tr>
+              ))}
+              {Array.from({length: Math.max(0, 10 - items.length)}).map((_, i) => (
+                  <tr key={`empty-${i}`} className="h-6 border-b border-gray-200">
+                      <td className="border-r border-black"></td><td className="border-r border-black bg-gray-50"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
+                  </tr>
+              ))}
+          </tbody>
+      </table>
 
-        <div className="grid grid-cols-12 border-b border-gray-400">
-          <div className="col-span-2 bg-gray-100 px-2 py-1 text-[11px] font-semibold">
-            DIRECCIÓN:
+      {/* JUSTIFICACIÓN */}
+      <div className="border-2 border-black mb-8 relative">
+          <div className="p-3 min-h-[60px] text-[9px] uppercase italic bg-white text-justify leading-snug">
+              <span className="font-bold text-gray-400 text-[8px] not-italic block mb-1">JUSTIFICACIÓN:</span>
+              {req.justificacion}
           </div>
-          <div className="col-span-10 px-2 py-1 text-[11px] uppercase">
-            {req.direccion}
+          <div className="border-t border-black p-1.5 flex justify-between bg-gray-100 px-4 text-[8px] uppercase font-bold tracking-wide">
+              <span>RESPONSABLE: <span className="font-normal text-black ml-1">{req.responsableNombre}</span></span>
+              <span>TEL: <span className="font-normal text-black ml-1">{req.responsableTelefono}</span></span>
           </div>
-        </div>
+      </div>
 
-        <div className="grid grid-cols-12">
-          <div className="col-span-4 bg-gray-100 px-2 py-1 text-[11px] font-semibold">
-            TIPO DE MATERIAL Y/O SERVICIOS:
+      {/* FIRMAS */}
+      <div className="grid grid-cols-3 gap-6 mt-12 text-center text-[9px]">
+          <div className="flex flex-col justify-end h-28">
+              <div className="font-bold mb-auto tracking-widest text-[8px]">SOLICITA</div>
+              <div className="border-t border-black pt-2">
+                  <div className="font-bold uppercase">{req.titularNombre}</div>
+                  <div className="text-[7px] uppercase font-medium text-gray-600 mt-0.5">TITULAR DEL ÁREA DE {req.organoRequirente}</div>
+              </div>
           </div>
-          <div className="col-span-8 px-2 py-1 text-[11px] uppercase">
-            {req.tipoMaterial}
+          <div className="flex flex-col justify-end h-28">
+              <div className="font-bold mb-auto tracking-widest text-[8px]">Vo. Bo.</div>
+              <div className="border-t border-black pt-2">
+                  <div className="font-bold uppercase">LIC. ERICK DANIEL RODAS MORENO</div>
+                  <div className="text-[7px] uppercase font-medium text-gray-600 mt-0.5">DIRECTOR DE ADQUISICIONES</div>
+              </div>
           </div>
-        </div>
-      </section>
-
-      {/* TABLA DE PARTIDAS */}
-      <section className="border border-gray-400 mb-4">
-        <div className="grid grid-cols-12 bg-gray-100 border-b border-gray-400 text-[11px] font-semibold">
-          <div className="col-span-2 border-r border-gray-400 px-2 py-1 text-center">
-            CANT. SOLICITADA
+          <div className="flex flex-col justify-end h-28">
+              <div className="font-bold mb-auto tracking-widest text-[8px]">AUTORIZA</div>
+              <div className="border-t border-black pt-2">
+                  <div className="font-bold uppercase">CP. DAYTON VENTURA MONTECINOS</div>
+                  <div className="text-[7px] uppercase font-medium text-gray-600 mt-0.5">OFICIAL MAYOR</div>
+              </div>
           </div>
-          <div className="col-span-2 border-r border-gray-400 px-2 py-1 text-center">
-            CANT. AUTORIZADA
-          </div>
-          <div className="col-span-4 border-r border-gray-400 px-2 py-1 text-center">
-            CONCEPTO
-          </div>
-          <div className="col-span-4 px-2 py-1 text-center">
-            DESCRIPCIÓN
-          </div>
-        </div>
-
-        {req.lineas.map((l) => (
-          <div
-            key={l.id}
-            className="grid grid-cols-12 border-b border-gray-200 text-[11px] min-h-[28px]"
-          >
-            <div className="col-span-2 border-r border-gray-200 px-2 py-1 text-center">
-              {l.cantidad}
-            </div>
-            <div className="col-span-2 border-r border-gray-200 px-2 py-1 text-center">
-              {/* Cantidad autorizada viene de la revisión */}
-              {l.cantidadAutorizada ?? ""}
-            </div>
-            <div className="col-span-4 border-r border-gray-200 px-2 py-1">
-              {l.concepto}
-            </div>
-            <div className="col-span-4 px-2 py-1">
-              {l.descripcion}
-            </div>
-          </div>
-        ))}
-
-        {/* Relleno de filas vacías para que el formato se vea completo */}
-        {Array.from({ length: Math.max(8 - req.lineas.length, 0) }).map(
-          (_, idx) => (
-            <div
-              key={`empty-${idx}`}
-              className="grid grid-cols-12 border-b border-gray-200 text-[11px] min-h-[28px]"
-            >
-              <div className="col-span-2 border-r border-gray-200" />
-              <div className="col-span-2 border-r border-gray-200" />
-              <div className="col-span-4 border-r border-gray-200" />
-              <div className="col-span-4" />
-            </div>
-          )
-        )}
-      </section>
-
-      {/* EL MATERIAL (JUSTIFICACIÓN) + FIRMAS */}
-      <section className="border border-gray-400">
-        <div className="border-b border-gray-400 px-2 py-1 text-[11px] font-semibold">
-          EL MATERIAL (Justificación / actividad):
-        </div>
-        <div className="px-3 py-3 text-[11px] min-h-[48px]">
-          {req.justificacion}
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 px-4 py-8 text-center text-[11px]">
-          <div>
-            <div className="border-t border-gray-400 pt-2 mb-1" />
-            <div className="font-semibold uppercase text-[10px]">SOLICITA</div>
-            <div className="mt-1 text-[10px]">
-              Nombre y firma de quien solicita
-            </div>
-          </div>
-          <div>
-            <div className="border-t border-gray-400 pt-2 mb-1" />
-            <div className="font-semibold uppercase text-[10px]">VO. BO.</div>
-            <div className="mt-1 text-[10px]">
-              Lic. Erick Daniel Rodas Moreno
-            </div>
-            <div className="text-[10px]">
-              Dirección de Adquisiciones y Servicios
-            </div>
-          </div>
-          <div>
-            <div className="border-t border-gray-400 pt-2 mb-1" />
-            <div className="font-semibold uppercase text-[10px]">AUTORIZA</div>
-            <div className="mt-1 text-[10px]">
-              CP Dayton Ventura Montecinos
-            </div>
-            <div className="text-[10px]">Oficial Mayor</div>
-          </div>
-        </div>
-      </section>
-
-      <footer className="mt-4 text-[9px] text-center text-gray-600">
-        Palacio Municipal · Tapachula, Chiapas · Gobierno Municipal 2024–2027
-      </footer>
+      </div>
     </div>
   );
 }

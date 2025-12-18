@@ -1,0 +1,91 @@
+export const ORGANOS_REQUIRENTES = [
+  "Oficina de la Presidencia Municipal",
+  "Sindicatura Municipal",
+  "Primera Regiduría",
+  "Segunda Regiduría",
+  "Tercera Regiduría",
+  "Cuarta Regiduría",
+  "Quinta Regiduría",
+  "Sexta Regiduría",
+  "Séptima Regiduría",
+  "Octava Regiduría",
+  "Novena Regiduría",
+  "Secretaría Ejecutiva de Gabinete",
+  "Secretaría Particular",
+  "Dirección de Informática",
+  "Dirección Técnica de Eventos",
+  "Dirección de Atención Ciudadana",
+  "Secretaría Privada",
+  "Dirección de Comunicación Social",
+  "Delegación Técnica Municipal del Agua",
+  "Coordinación General de Transparencia, Acceso a la Información Pública y Protección de Datos Personales",
+  "Secretaría General del Ayuntamiento",
+  "Tesorería Municipal",
+  "Oficialía Mayor",
+  "Dirección de Adquisiciones y Servicios",
+  "Dirección de Recursos Humanos",
+  "Dirección de Recursos Materiales, Servicios y Patrimonio",
+  "Secretaría de Planeación y Desarrollo Municipal",
+  "Secretaría de Seguridad Pública y Protección Ciudadana Municipal",
+  "Secretaría de Protección Civil Municipal",
+  "Secretaría de Obras Públicas Municipal",
+  "Secretaría de Bienestar Municipal",
+  "Secretaría de Economía y Turismo Municipal",
+  "Secretaría de Salud Pública Municipal",
+  "Secretaría de Desarrollo Urbano y Ecología",
+  "Secretaría de Igualdad de Género",
+  "Secretaría de la Juventud y Deporte Municipal",
+  "Secretaría de Desarrollo Rural y Fomento a Agronegocios",
+  "Secretaría de Educación y Cultura Municipal",
+  "Secretaría de Servicios Públicos Municipal",
+  "Órgano Interno de Control Municipal",
+  "Consejería Jurídica",
+  "Instituto Ciudadano de Planeación Municipal",
+  "Comité de Planeación para el Desarrollo Municipal",
+  "Secretariado Ejecutivo del Consejo Municipal de Seguridad Pública",
+  "DIF - CAS Centro",
+  "DIF - CAS Perla del Soconusco",
+  "URIGEV"
+];
+
+export const UNIDADES_MEDIDA = [
+  "Caja", "Día", "Gramo", "Hora", "Kilogramo", "Kit (Conjunto de piezas)",
+  "Litro", "Metro", "Metro Cuadrado", "Miligramo", "Mililitro",
+  "Paquete", "Par", "Pieza", "Servicio"
+];
+
+export const CATEGORIAS: Record<string, string[]> = {
+  "MATERIALES Y SUMINISTROS": [
+    "MATERIALES DE ADMINISTRACION, EMISION DE DOCUMENTOS Y ARTICULOS OFICIALES",
+    "ALIMENTOS Y UTENSILIOS",
+    "MATERIAS PRIMAS Y MATERIALES DE PRODUCCION Y COMERCIALIZACION",
+    "MATERIALES Y ARTICULOS DE CONSTRUCCION Y DE REPARACION",
+    "PRODUCTOS QUIMICOS, FARMACEUTICOS Y DE LABORATORIO",
+    "COMBUSTIBLES, LUBRICANTES Y ADITIVOS",
+    "VESTUARIO, BLANCOS, PRENDAS DE PROTECCION Y ARTICULOS DEPORTIVOS",
+    "MATERIALES Y SUMINISTROS PARA SEGURIDAD",
+    "HERRAMIENTAS, REFACCIONES Y ACCESORIOS MENORES"
+  ],
+  "SERVICIOS GENERALES": [
+    "SERVICIOS BASICOS",
+    "SERVICIOS DE ARRENDAMIENTO",
+    "SERVICIOS PROFESIONALES, CIENTIFICOS, TECNICOS Y OTROS SERVICIOS",
+    "SERVICIOS FINANCIEROS, BANCARIOS Y COMERCIALES",
+    "SERVICIOS DE INSTALACION, REPARACION, MANTENIMIENTO Y CONSERVACION",
+    "SERVICIOS DE COMUNICACION SOCIAL Y PUBLICIDAD",
+    "SERVICIOS DE TRASLADO Y VIATICOS",
+    "SERVICIOS OFICIALES",
+    "OTROS SERVICIOS GENERALES"
+  ],
+  "BIENES MUEBLES, INMUEBLES E INTANGIBLES": [
+    "MOBILIARIO Y EQUIPO DE ADMINISTRACION",
+    "MOBILIARIO Y EQUIPO EDUCACIONAL Y RECREATIVO",
+    "EQUIPO E INSTRUMENTAL MEDICO Y DE LABORATORIO",
+    "VEHICULOS Y EQUIPO DE TRANSPORTE",
+    "EQUIPO DE DEFENSA Y SEGURIDAD",
+    "MAQUINARIA, OTROS EQUIPOS Y HERRAMIENTAS",
+    "ACTIVOS BIOLOGICOS",
+    "BIENES INMUEBLES",
+    "ACTIVOS INTANGIBLES"
+  ]
+};

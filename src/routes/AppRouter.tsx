@@ -1,167 +1,152 @@
 // src/routes/AppRouter.tsx
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
+import { SessionProvider, useSession, type Role } from "../hooks/useSession";
+import { RequisicionesProvider } from "../hooks/useRequisiciones";
+import { NotificacionesProvider } from "../hooks/useNotificaciones";
 
+import { AppShell } from "../components/layout/AppShell";
+import AccessDenied from "../components/AccessDenied";
+
+// Páginas
 import LoginPage from "../pages/LoginPage";
 import MisRequisiciones from "../pages/MisRequisiciones";
 import NuevaRequisicion from "../pages/NuevaRequisicion";
 import BandejaRevision from "../pages/BandejaRevision";
 import DetalleRequisicion from "../pages/DetalleRequisicion";
 import RequisicionPrint from "../pages/RequisicionPrint";
-import NotificacionesPage from "../pages/NotificacionesPage"; // Usamos la nueva versión Page
-import CotizacionPrint from "../pages/CotizacionPrint"; // <--- IMPORTANTE: Importar el nuevo archivo
+import CotizacionPrint from "../pages/CotizacionPrint";
+import NotificacionesPage from "../pages/NotificacionesPage";
+import UsuariosAdmin from "../pages/admin/UsuariosAdmin";
 
-import { AppShell } from "../components/layout/AppShell";
-import AccessDenied from "../components/AccessDenied";
-
-import {
-  SessionProvider,
-  useSession,
-  type Role,
-} from "../hooks/useSession";
-import { RequisicionesProvider } from "../hooks/useRequisiciones";
-import { NotificacionesProvider } from "../hooks/useNotificaciones";
-
-// ---------- Guards ----------
+// --- GUARDS ---
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useSession();
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
-function RequireRole({
-  allowed,
-  children,
-}: {
-  allowed: Role[];
-  children: ReactNode;
-}) {
+function RequireRole({ allowed, children }: { allowed: Role[]; children: ReactNode }) {
   const { role } = useSession();
-
-  if (!role) return <AccessDenied />;
-  if (!allowed.includes(role)) return <AccessDenied />;
-
+  if (!role || !allowed.includes(role)) return <AccessDenied />;
   return <>{children}</>;
 }
 
-// ---------- Router interno ----------
+// --- ROUTER INTERNO ---
 
 function InnerRouter() {
   return (
     <HashRouter>
       <Routes>
-        {/* LOGIN */}
+        {/* Login Público */}
         <Route path="/login" element={<LoginPage />} />
-
-        {/* REDIRECCIÓN RAÍZ */}
-        <Route path="/" element={<Navigate to="/mis-requisiciones" replace />} />
-
-        {/* ROL SOLICITUD – Dashboard básico (mis requisiciones) */}
-        <Route
-          path="/mis-requisiciones"
-          element={
+        
+        {/* Redirección inteligente / Dashboard */}
+        <Route path="/" element={
             <RequireAuth>
-              <RequireRole allowed={["solicitud", "admin"]}>
-                <AppShell>
-                  <MisRequisiciones />
-                </AppShell>
-              </RequireRole>
+               <DashboardDispatcher />
             </RequireAuth>
-          }
-        />
+        } />
 
-        {/* ROL SOLICITUD – Nueva requisición (creación / edición vía ?id=) */}
-        <Route
-          path="/nueva"
-          element={
+        {/* --- RUTAS SOLICITANTE --- */}
+        <Route path="/mis-requisiciones" element={
+          <RequireAuth>
+            <RequireRole allowed={["solicitud", "admin"]}>
+                <AppShell><MisRequisiciones /></AppShell>
+            </RequireRole>
+          </RequireAuth>
+        } />
+        
+        <Route path="/nueva" element={
+          <RequireAuth>
+            <RequireRole allowed={["solicitud", "admin"]}>
+                <AppShell><NuevaRequisicion /></AppShell>
+            </RequireRole>
+          </RequireAuth>
+        } />
+
+        {/* --- RUTAS REVISIÓN --- */}
+        <Route path="/revision/requisiciones" element={
+          <RequireAuth>
+            <RequireRole allowed={["revision", "admin", "autorizacion", "direccion"]}>
+                <AppShell><BandejaRevision /></AppShell>
+            </RequireRole>
+          </RequireAuth>
+        } />
+        
+        {/* --- RUTAS ADMIN --- */}
+        <Route path="/admin/usuarios" element={
             <RequireAuth>
-              <RequireRole allowed={["solicitud", "admin"]}>
-                <AppShell>
-                  <NuevaRequisicion />
-                </AppShell>
-              </RequireRole>
+                <RequireRole allowed={["admin"]}>
+                    <AppShell><UsuariosAdmin /></AppShell>
+                </RequireRole>
             </RequireAuth>
-          }
-        />
+        } />
 
-        {/* BANDEJA DE REVISIÓN – Adquisiciones */}
-        <Route
-          path="/revision/requisiciones"
-          element={
-            <RequireAuth>
-              <RequireRole allowed={["revision", "admin"]}>
-                <AppShell>
-                  <BandejaRevision />
-                </AppShell>
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
+        {/* --- DETALLES Y NOTIFICACIONES (Compartidos) --- */}
+        <Route path="/requisiciones/:id" element={
+          <RequireAuth>
+            <AppShell><DetalleRequisicion /></AppShell>
+          </RequireAuth>
+        } />
+        
+        <Route path="/notificaciones" element={
+          <RequireAuth>
+            <AppShell><NotificacionesPage /></AppShell>
+          </RequireAuth>
+        } />
 
-        {/* DETALLE DE REQUISICIÓN 
-            Lo comparten: solicitud, revisión y admin  */}
-        <Route
-          path="/requisiciones/:id"
-          element={
-            <RequireAuth>
-              <RequireRole allowed={["solicitud", "revision", "admin"]}>
-                <AppShell>
-                  <DetalleRequisicion />
-                </AppShell>
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-
-        {/* IMPRESIÓN DE FORMATO FINAL (AUTORIZADA) */}
-        <Route
-          path="/requisiciones/:id/imprimir"
-          element={
-            <RequireAuth>
-              <RequireRole allowed={["solicitud", "revision", "admin"]}>
-                <RequisicionPrint />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-
-        {/* IMPRESIÓN LISTA COTIZACIÓN (PROVEEDORES) - NUEVA RUTA */}
-        <Route
-          path="/requisiciones/:id/cotizacion-print"
-          element={
-            <RequireAuth>
-              <RequireRole allowed={["revision", "admin"]}>
+        {/* --- IMPRESIONES (Sin AppShell para que salga limpio al imprimir) --- */}
+        <Route path="/requisiciones/:id/imprimir" element={
+          <RequireAuth>
+            <RequisicionPrint />
+          </RequireAuth>
+        } />
+        
+        <Route path="/requisiciones/:id/cotizacion-print" element={
+          <RequireAuth>
+            <RequireRole allowed={["revision", "admin"]}>
                 <CotizacionPrint />
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
+            </RequireRole>
+          </RequireAuth>
+        } />
 
-        {/* NOTIFICACIONES */}
-        <Route
-          path="/notificaciones"
-          element={
-            <RequireAuth>
-              <RequireRole allowed={["solicitud", "revision", "admin"]}>
-                <AppShell>
-                  <NotificacionesPage />
-                </AppShell>
-              </RequireRole>
-            </RequireAuth>
-          }
-        />
-
-        {/* CATCH-ALL */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* Catch all: redirigir a inicio */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>
   );
 }
 
-// ---------- Wrapper con providers ----------
+// --- COMPONENTE DISPATCHER (Lógica de Dashboard) ---
+
+function DashboardDispatcher() {
+    const { user } = useSession();
+
+    // 1. Solicitantes van directo a sus requisiciones
+    if (user?.role === 'solicitud') return <Navigate to="/mis-requisiciones" replace />;
+    
+    // 2. Revisores van directo a su bandeja
+    if (user?.role === 'revision') return <Navigate to="/revision/requisiciones" replace />;
+
+    // 3. Admin / Dirección ven el Dashboard (ahora con MENÚ)
+    return (
+        <AppShell>
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center p-6">
+                <div className="text-4xl mb-4">📊</div>
+                <h2 className="text-xl font-bold text-gray-700">Dashboard de Dirección</h2>
+                <p className="text-gray-500 mt-2">Bienvenido, {user?.titular || "Usuario"}.</p>
+                <div className="mt-6 p-4 bg-blue-50 text-blue-800 rounded-lg text-sm max-w-md border border-blue-100">
+                    <p className="font-bold mb-1">ℹ️ Panel en construcción</p>
+                    <p>Usa el menú lateral para acceder a la <strong>Gestión de Usuarios</strong> o revisar el historial.</p>
+                </div>
+            </div>
+        </AppShell>
+    );
+}
+
+// --- COMPONENTE PRINCIPAL ---
 
 export default function AppRouter() {
   return (

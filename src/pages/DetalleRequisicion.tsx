@@ -1,4 +1,4 @@
-// src/pages/DetalleRequisicion.tsx
+// FILE: src/pages/DetalleRequisicion.tsx
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Linea, EstadoRequisicion } from "../hooks/useRequisiciones";
@@ -9,11 +9,11 @@ import { useNotificaciones } from "../hooks/useNotificaciones";
 function estadoLabel(estado: string) {
   const map: Record<string, string> = {
     borrador: "Borrador",
-    en_revision: "En revisión",
-    cotizacion: "Cotización de material",
-    suficiencia: "Suficiencia presupuestal",
-    autorizada: "Autorizada (Por comprar/entregar)",
-    material_entregado: "Finalizada / Entregada",
+    en_revision: "En Revisión",
+    cotizacion: "En Cotización",
+    suficiencia: "Suficiencia Presupuestal",
+    autorizada: "Autorizada",
+    material_entregado: "Finalizada",
     finalizada: "Finalizada",
     rechazada: "Rechazada",
   };
@@ -31,84 +31,59 @@ export default function DetalleRequisicion() {
 
   const [notas, setNotas] = useState("");
   const [lineasTrabajo, setLineasTrabajo] = useState<Linea[]>([]);
-  const [filasEditando, setFilasEditando] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (req?.revisionNotas) setNotas(req.revisionNotas);
     if (req?.lineas) {
       setLineasTrabajo(
         req.lineas.map((l) => ({
-          estadoLinea: l.estadoLinea ?? "pendiente",
           ...l,
+          cantidadAutorizada: l.cantidadAutorizada ?? l.cantidad,
+          unidadAutorizada: l.unidadAutorizada ?? l.unidad,
+          observacionRevision: l.observacionRevision ?? "",
+          estadoLinea: l.estadoLinea ?? "pendiente",
         }))
       );
-      
-      const mapaEdicion: Record<string, boolean> = {};
-      req.lineas.forEach((l) => {
-        if (l.observacionRevision || (l.cantidadAutorizada !== undefined && l.cantidadAutorizada !== l.cantidad)) {
-          mapaEdicion[l.id] = true;
-        }
-      });
-      setFilasEditando(mapaEdicion);
     }
   }, [req]);
 
-  if (!req) return <div className="p-4">Requisición no encontrada.</div>;
+  if (!req) return <div className="p-8 text-center text-gray-500">Requisición no encontrada.</div>;
 
-  const canReview = (role === "revision" || role === "admin") && (req.estado === "en_revision");
   const isGestor = role === "revision" || role === "admin";
+  const canReview = isGestor && req.estado === "en_revision";
 
-  const handleToggleEdicion = (lineaId: string, activo: boolean) => {
-    setFilasEditando((prev) => ({ ...prev, [lineaId]: activo }));
-    
-    if (!activo) {
-      setLineasTrabajo((prev) =>
-        prev.map((l) =>
-          l.id === lineaId
-            ? {
-                ...l,
-                cantidadAutorizada: undefined,
-                unidadAutorizada: undefined,
-                observacionRevision: "",
-                estadoLinea: "autorizada", 
-              }
-            : l
-        )
-      );
-    }
-  };
-
-  const actualizarCampoLinea = (lineaId: string, campo: keyof Linea, valor: string | number) => {
+  const handleCellChange = (lineaId: string, campo: keyof Linea, valor: string | number) => {
     setLineasTrabajo((prev) =>
-      prev.map((l) => (l.id === lineaId ? { ...l, [campo]: valor } : l))
+      prev.map((l) => {
+        if (l.id !== lineaId) return l;
+        return { ...l, [campo]: valor };
+      })
     );
   };
 
   const guardarRevisionLineas = () => {
-    const lineasFinales = lineasTrabajo.map(l => {
-      if (!filasEditando[l.id]) {
+    const lineasFinales = lineasTrabajo.map((l) => {
+        const cantAut = l.cantidadAutorizada ?? 0;
         return {
-           ...l,
-           cantidadAutorizada: undefined,
-           unidadAutorizada: undefined,
-           observacionRevision: "",
-           estadoLinea: "autorizada" as const 
-        };
-      }
-      return l;
+            ...l,
+            estadoLinea: cantAut > 0 ? "autorizada" : "rechazada",
+            cantidadAutorizada: cantAut
+        } as Linea;
     });
 
     actualizarLineas(req.id, lineasFinales);
     
-    const huboCambios = lineasFinales.some(l => l.observacionRevision || l.cantidadAutorizada);
+    const huboCambios = lineasFinales.some(
+        l => l.observacionRevision || (l.cantidadAutorizada !== l.cantidad)
+    );
+    
     if (huboCambios) {
-        // ENVIAR SOLO AL SOLICITANTE
         agregarNotificacion({
             reqId: req.id,
             folio: req.folio,
-            mensaje: "Adquisiciones realizó observaciones en tu requisición.",
+            mensaje: "Se han realizado ajustes u observaciones a tus partidas.",
             tipo: "linea",
-            targetRole: "solicitud" // <--- CLAVE
+            targetRole: "solicitud"
         });
     }
     window.alert("Cambios guardados correctamente.");
@@ -117,234 +92,238 @@ export default function DetalleRequisicion() {
   const handleDecision = (nuevoEstado: EstadoRequisicion) => {
     let confirmMsg = `¿Cambiar estado a: ${estadoLabel(nuevoEstado)}?`;
     
-    if (nuevoEstado === 'suficiencia') confirmMsg = "Se enviará a Tesorería para validar suficiencia presupuestal. ¿Continuar?";
-    if (nuevoEstado === 'autorizada') confirmMsg = "¡Atención! Al autorizar, confirmas que Tesorería aprobó el presupuesto. El solicitante podrá imprimir el formato.";
-    if (nuevoEstado === 'material_entregado') confirmMsg = "Se marcará como finalizada/entregada. Esto cierra el ciclo.";
+    // Mensajes de confirmación específicos para regresar
+    if (req.estado === 'cotizacion' && nuevoEstado === 'en_revision') confirmMsg = "¿Regresar a Revisión? (Se notificará al área técnica)";
+    if (req.estado === 'suficiencia' && nuevoEstado === 'cotizacion') confirmMsg = "¿Regresar a Cotización? (Por ajuste de precios o proveedores)";
+    if (req.estado === 'autorizada' && nuevoEstado === 'suficiencia') confirmMsg = "¿Regresar a Suficiencia? (Cancelando autorización de compra)";
 
     if (!window.confirm(confirmMsg)) return;
     
+    const revisorData = user ? { uid: user.uid, email: user.email } : { uid: "sys", email: "sistema" };
+
     actualizarEstado(req.id, nuevoEstado, {
       revisionNotas: notas,
-      revisadaPor: { uid: user?.uid || "sys", email: user?.email || "sys" },
+      revisadaPor: revisorData,
     });
 
     let msg = `Nuevo estado: ${estadoLabel(nuevoEstado)}`;
-    if(nuevoEstado === 'autorizada') msg = "¡Tu requisición fue AUTORIZADA! Ya puedes imprimir el formato.";
-    if(nuevoEstado === 'material_entregado') msg = "Tu material ha sido marcado como entregado. Proceso finalizado.";
-    if(nuevoEstado === 'borrador') msg = "Tu requisición fue devuelta para correcciones.";
-
-    // ENVIAR SOLO AL SOLICITANTE
+    if(nuevoEstado === 'autorizada') msg = "✅ TU SOLICITUD FUE AUTORIZADA. Procede a imprimir y firmar el formato.";
+    
     agregarNotificacion({
       reqId: req.id,
       folio: req.folio,
       mensaje: msg,
       tipo: "estado",
-      targetRole: "solicitud" // <--- CLAVE
+      targetRole: "solicitud"
     });
 
     navigate("/revision/requisiciones");
   };
 
   return (
-    <div className="space-y-6">
-      <header className="flex justify-between items-start">
+    <div className="space-y-8 pb-24 font-sans text-gray-800">
+      {/* HEADER */}
+      <header className="flex items-center justify-between border-b border-gray-200 pb-4">
         <div>
-           <h2 className="text-xl font-bold text-ink">Gestión de Requisición</h2>
-           <p className="text-sm text-ink/70">Folio: <strong>{req.folio}</strong> · {estadoLabel(req.estado)}</p>
+           <div className="flex items-center gap-3">
+             <h2 className="text-2xl font-bold text-gray-800">Gestión de Requisición</h2>
+             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${
+                 req.estado === 'en_revision' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                 req.estado === 'autorizada' ? 'bg-green-100 text-green-800 border-green-200' :
+                 'bg-blue-50 text-blue-800 border-blue-200'
+             }`}>
+                {estadoLabel(req.estado)}
+             </span>
+           </div>
+           <p className="text-sm text-gray-500 mt-1">Folio: <span className="font-mono font-medium text-black">{req.folio}</span></p>
         </div>
-        <button onClick={() => navigate(-1)} className="text-xs border px-3 py-1 rounded-full hover:bg-gray-100">Volver</button>
+        <button onClick={() => navigate(-1)} className="text-sm font-medium text-gray-500 hover:text-black hover:underline transition-colors">
+            &larr; Volver al listado
+        </button>
       </header>
 
-      {/* DATOS GENERALES */}
-      <section className="bg-surface p-4 rounded-[--radius-xl] shadow-sm text-sm border border-border">
-        <h3 className="font-bold text-ink mb-3 border-b pb-2">Información del Solicitante</h3>
-        <div className="grid md:grid-cols-2 gap-y-4 gap-x-8">
-            <div>
-                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Secretaría / Instituto</div>
-                <div className="text-ink font-medium">{req.secretariaNombre}</div>
-            </div>
-            <div>
-                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Dirección / Área</div>
-                <div className="text-ink font-medium">{req.direccion}</div>
-            </div>
-            <div>
-                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Responsable</div>
-                <div className="text-ink">{req.responsableNombre}</div>
-            </div>
-            <div>
-                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Teléfono de Contacto</div>
-                <div className="text-ink font-mono text-brand">{req.responsableTelefono}</div>
-            </div>
-            <div className="md:col-span-2 bg-gray-50 p-3 rounded border border-gray-100 mt-1">
-                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Justificación / Actividad</div>
-                <div className="text-ink whitespace-pre-wrap">{req.justificacion}</div>
-            </div>
+      {/* INFO CARD */}
+      <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 grid md:grid-cols-2 gap-6 text-sm">
+        <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Órgano Requirente</label>
+            <div className="font-medium text-lg text-gray-900">{req.organoRequirente}</div>
+        </div>
+        <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Área Solicitante</label>
+            <div className="font-medium text-gray-700">{req.direccion}</div>
+        </div>
+        <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Responsable</label>
+            <div className="text-gray-700">{req.responsableNombre}</div>
+            <div className="text-xs text-gray-500 mt-0.5">Tel: {req.responsableTelefono}</div>
+        </div>
+        <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Categoría</label>
+            <div className="text-gray-700">{req.tipoMaterial} / {req.subTipoMaterial}</div>
+        </div>
+        <div className="md:col-span-2 bg-gray-50 p-4 rounded border border-gray-100">
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Justificación</label>
+            <p className="text-gray-800 italic leading-relaxed">{req.justificacion}</p>
         </div>
       </section>
 
-      {/* TABLA DE PARTIDAS */}
-      <section className="bg-surface p-4 rounded-[--radius-xl] shadow-[--shadow-card]">
-         <h3 className="font-bold text-ink mb-4 text-sm">Detalle de partidas</h3>
-         <table className="w-full text-xs">
-            <thead className="bg-bg text-ink/70">
-               <tr>
-                  <th className="px-2 py-2 text-left">Solicitado</th>
-                  <th className="px-2 py-2 text-left w-1/2">Concepto</th>
-                  {canReview && <th className="px-2 py-2 text-left w-1/3">Acción de Revisión</th>}
-               </tr>
+      {/* TABLA DE REVISIÓN */}
+      <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+            <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Detalle de Partidas</h3>
+            {canReview && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">EDICIÓN HABILITADA</span>}
+         </div>
+         
+         <table className="w-full text-sm text-left">
+            <thead className="bg-white text-gray-500 font-semibold border-b border-gray-200 text-xs uppercase">
+            <tr>
+                <th className="px-6 py-3 w-32">Solicitado</th>
+                <th className="px-6 py-3">Descripción</th>
+                <th className="px-6 py-3 w-40 text-center">Autorizado</th>
+                <th className="px-6 py-3 w-1/3">Observaciones</th>
+            </tr>
             </thead>
-            <tbody>
-               {lineasTrabajo.map((l) => {
-                  const isEditing = filasEditando[l.id];
-                  return (
-                     <tr key={l.id} className={`border-t ${isEditing ? 'bg-amber-50/60' : ''}`}>
-                        <td className="px-2 py-3 align-top font-medium">
-                           {l.cantidad} {l.unidad}
+            <tbody className="divide-y divide-gray-100">
+            {lineasTrabajo.map((l) => {
+                const isRejected = (l.cantidadAutorizada ?? l.cantidad) === 0;
+                return (
+                    <tr key={l.id} className={`group transition-colors ${isRejected ? "bg-red-50" : "hover:bg-gray-50"}`}>
+                        <td className="px-6 py-4 align-top font-medium text-gray-500">
+                            {l.cantidad} <span className="text-xs">{l.unidad}</span>
                         </td>
-                        <td className="px-2 py-3 align-top">
-                           <div className="font-semibold text-ink">{l.concepto}</div>
-                           <div className="text-ink/60">{l.descripcion}</div>
-                           {!canReview && l.cantidadAutorizada && (
-                               <div className="mt-1 text-green-700 font-bold">
-                                   Autorizado: {l.cantidadAutorizada} {l.unidadAutorizada || l.unidad}
-                               </div>
-                           )}
-                           {l.observacionRevision && !isEditing && (
-                             <div className="mt-1 text-red-600 italic border-l-2 border-red-300 pl-2">
-                                Obs: {l.observacionRevision}
-                             </div>
-                           )}
+                        <td className="px-6 py-4 align-top">
+                            <div className="font-bold text-gray-800">{l.concepto}</div>
+                            <div className="text-xs text-gray-500 mt-1">{l.descripcion}</div>
                         </td>
-                        
-                        {canReview && (
-                           <td className="px-2 py-3 align-top">
-                              <label className={`
-                                flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition-all mb-2 select-none
-                                ${isEditing ? 'bg-white border-red-200 ring-1 ring-red-100' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}
-                              `}>
-                                 <input 
-                                    type="checkbox" 
-                                    className="w-4 h-4 accent-brand"
-                                    checked={!!isEditing}
-                                    onChange={(e) => handleToggleEdicion(l.id, e.target.checked)}
-                                 />
-                                 <div className="flex flex-col">
-                                    <span className={`text-xs font-bold ${isEditing ? 'text-red-600' : 'text-gray-600'}`}>
-                                        {isEditing ? "✕ Cancelar (No modificar)" : "✏️ Realizar observaciones / Ajustar"}
-                                    </span>
-                                 </div>
-                              </label>
-
-                              {isEditing && (
-                                 <div className="bg-white border border-amber-200 rounded-lg p-3 space-y-3 animate-in fade-in zoom-in-95 duration-200 shadow-sm">
-                                    <div className="grid grid-cols-2 gap-2">
-                                       <div>
-                                          <label className="block text-[9px] text-gray-500 uppercase mb-1 font-bold">Cant. Autorizada</label>
-                                          <input 
-                                             type="number"
-                                             className="w-full border rounded px-2 py-1"
-                                             placeholder={l.cantidad.toString()}
-                                             value={l.cantidadAutorizada ?? ""}
-                                             onChange={(e) => actualizarCampoLinea(l.id, "cantidadAutorizada", e.target.value)}
-                                          />
-                                       </div>
-                                       <div>
-                                          <label className="block text-[9px] text-gray-500 uppercase mb-1 font-bold">Unidad</label>
-                                          <select 
-                                             className="w-full border rounded px-2 py-1"
-                                             value={l.unidadAutorizada ?? l.unidad}
-                                             onChange={(e) => actualizarCampoLinea(l.id, "unidadAutorizada", e.target.value)}
-                                          >
-                                             <option value="pieza">pieza</option>
-                                             <option value="par">par</option>
-                                             <option value="caja">caja</option>
-                                             <option value="juego">juego</option>
-                                             <option value="litro">litro</option>
-                                             <option value="metro">metro</option>
-                                          </select>
-                                       </div>
-                                    </div>
-                                    <div>
-                                       <label className="block text-[9px] text-gray-500 uppercase mb-1 font-bold">Observación</label>
-                                       <textarea 
-                                          className="w-full border border-gray-300 rounded px-2 py-1 min-h-[50px] text-xs"
-                                          placeholder="Motivo del ajuste..."
-                                          value={l.observacionRevision ?? ""}
-                                          onChange={(e) => actualizarCampoLinea(l.id, "observacionRevision", e.target.value)}
-                                       />
-                                    </div>
-                                 </div>
-                              )}
-                           </td>
-                        )}
-                     </tr>
-                  );
-               })}
+                        <td className="px-6 py-4 align-top text-center">
+                            {canReview ? (
+                                <input 
+                                    type="number" min="0"
+                                    className={`w-20 p-2 text-center font-bold border rounded-md outline-none focus:ring-2 transition-all ${isRejected ? 'border-red-300 text-red-600 bg-white ring-red-200' : 'border-gray-300 text-green-700 focus:ring-green-500'}`}
+                                    value={l.cantidadAutorizada}
+                                    onChange={(e) => handleCellChange(l.id, "cantidadAutorizada", Number(e.target.value))}
+                                />
+                            ) : (
+                                <div className={`font-bold ${isRejected ? 'text-red-600' : 'text-green-700'}`}>
+                                    {l.cantidadAutorizada}
+                                </div>
+                            )}
+                        </td>
+                        <td className="px-6 py-4 align-top">
+                            {canReview ? (
+                                <input 
+                                    type="text" 
+                                    className="w-full p-2 border border-gray-300 rounded-md text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                                    placeholder="Agregar nota..."
+                                    value={l.observacionRevision}
+                                    onChange={(e) => handleCellChange(l.id, "observacionRevision", e.target.value)}
+                                />
+                            ) : (
+                                <span className="text-gray-500 italic text-xs">{l.observacionRevision || "—"}</span>
+                            )}
+                        </td>
+                    </tr>
+                );
+            })}
             </tbody>
          </table>
+
          {canReview && (
-            <div className="mt-4 flex justify-end">
-               <button onClick={guardarRevisionLineas} className="text-xs bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium shadow-sm">
-                  💾 Guardar cambios por partida
+            <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+               <button onClick={guardarRevisionLineas} className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-md font-semibold text-xs shadow-md hover:bg-black transition-all">
+                  💾 Guardar Cambios
                </button>
             </div>
          )}
       </section>
 
-      {/* FLUJO */}
+      {/* FLUJO DE ESTADOS (ACCIONES) */}
       {isGestor && (
-         <section className="bg-surface p-4 rounded-[--radius-xl] shadow-[--shadow-card] space-y-4 border-t-4 border-brand">
-            <h3 className="font-bold text-ink text-sm">Flujo del Proceso</h3>
+         <section className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-20 md:pl-72 flex justify-end gap-3 flex-wrap items-center">
+            
+            <div className="mr-auto text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:block">
+                Acciones de Flujo:
+            </div>
 
+            {/* ESTADO: EN REVISIÓN */}
             {req.estado === 'en_revision' && (
-                <div className="flex gap-3 justify-end flex-wrap">
-                    <button onClick={() => handleDecision("borrador")} className="btn-secondary text-amber-900 border-amber-300 hover:bg-amber-50 px-4 py-2 rounded text-xs">↩️ Devolver a solicitante</button>
-                    <button onClick={() => handleDecision("rechazada")} className="btn-secondary text-red-800 border-red-300 hover:bg-red-50 px-4 py-2 rounded text-xs">⛔ Rechazar solicitud</button>
-                    <button onClick={() => handleDecision("cotizacion")} className="bg-brand text-white px-4 py-2 rounded text-xs shadow hover:bg-brand-700">✅ Validar y Cotizar</button>
-                </div>
+                <>
+                    <button onClick={() => handleDecision("rechazada")} className="px-5 py-2.5 bg-rose-600 text-white rounded-md text-sm font-bold shadow-sm hover:bg-rose-700 transition-colors">
+                        ⛔ Rechazar
+                    </button>
+                    <button onClick={() => handleDecision("borrador")} className="px-5 py-2.5 bg-amber-500 text-white rounded-md text-sm font-bold shadow-sm hover:bg-amber-600 transition-colors">
+                        ↩️ Devolver
+                    </button>
+                    <button onClick={() => handleDecision("cotizacion")} className="px-6 py-2.5 bg-indigo-600 text-white rounded-md text-sm font-bold shadow-md hover:bg-indigo-700 transition-colors">
+                        ✅ Validar y Cotizar
+                    </button>
+                </>
             )}
 
+            {/* ESTADO: COTIZACIÓN */}
             {req.estado === 'cotizacion' && (
-                <div className="space-y-3">
-                    <div className="p-3 bg-blue-50 text-blue-800 text-xs rounded border border-blue-100">
-                        <strong>Estado:</strong> Solicitando cotizaciones a proveedores.
-                    </div>
-                    <div className="flex gap-3 justify-end flex-wrap">
-                        <button onClick={() => window.open(`/requisiciones/${req.id}/cotizacion-print`, '_blank')} className="bg-indigo-600 text-white px-4 py-2 rounded text-xs shadow hover:bg-indigo-700">🖨️ Lista para Proveedores</button>
-                        <button onClick={() => window.open(`/requisiciones/${req.id}/imprimir`, '_blank')} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded text-xs hover:bg-gray-50">🖨️ Imprimir Formato Interno</button>
-                        <div className="w-full border-t my-2"></div>
-                        <button onClick={() => handleDecision("suficiencia")} className="bg-green-600 text-white px-4 py-2 rounded text-xs shadow hover:bg-green-700">💰 Enviar a Suficiencia Presupuestal</button>
-                    </div>
-                </div>
+                <>
+                    {/* Botón Regresar Solicitado */}
+                    <button onClick={() => handleDecision("en_revision")} className="text-gray-500 hover:text-gray-800 font-semibold text-sm px-3 transition-colors mr-2">
+                        « Regresar a Revisión
+                    </button>
+                    
+                    <div className="h-8 w-px bg-gray-300 mx-2"></div>
+
+                    <button onClick={() => window.open(`#/requisiciones/${req.id}/cotizacion-print`, '_blank')} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-xs font-bold hover:bg-gray-50 transition-colors">
+                        🖨️ Lista Proveedores
+                    </button>
+                    <button onClick={() => window.open(`#/requisiciones/${req.id}/imprimir`, '_blank')} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-xs font-bold hover:bg-gray-50 transition-colors">
+                        🖨️ Formato Interno
+                    </button>
+                    
+                    <button onClick={() => handleDecision("suficiencia")} className="px-6 py-2.5 bg-green-600 text-white rounded-md text-sm font-bold shadow-md hover:bg-green-700 transition-colors ml-2">
+                        💰 Enviar a Suficiencia
+                    </button>
+                </>
             )}
 
+            {/* ESTADO: SUFICIENCIA */}
             {req.estado === 'suficiencia' && (
-                <div className="space-y-3">
-                    <div className="p-3 bg-yellow-50 text-yellow-800 text-xs rounded border border-yellow-100">
-                        <strong>Estado:</strong> En espera de autorización presupuestal (Tesorería).
-                    </div>
-                    <div className="flex gap-3 justify-end flex-wrap">
-                        <button onClick={() => window.open(`/requisiciones/${req.id}/imprimir`, '_blank')} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded text-xs hover:bg-gray-50">🖨️ Imprimir Requerimiento</button>
-                        <button onClick={() => handleDecision("autorizada")} className="bg-brand text-white px-4 py-2 rounded text-xs shadow hover:bg-brand-700">✅ Confirmar Autorización (Tesorería)</button>
-                    </div>
-                </div>
+                <>
+                    {/* Botón Regresar Solicitado */}
+                    <button onClick={() => handleDecision("cotizacion")} className="text-gray-500 hover:text-gray-800 font-semibold text-sm px-3 transition-colors mr-2">
+                        « Regresar a Cotización
+                    </button>
+
+                    <div className="h-8 w-px bg-gray-300 mx-2"></div>
+
+                    <button onClick={() => window.open(`#/requisiciones/${req.id}/imprimir`, '_blank')} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-xs font-bold hover:bg-gray-50 transition-colors">
+                        🖨️ Imprimir Requerimiento
+                    </button>
+                    <button onClick={() => handleDecision("autorizada")} className="px-6 py-2.5 bg-emerald-600 text-white rounded-md text-sm font-bold shadow-md hover:bg-emerald-700 transition-colors ml-2">
+                        ✅ Confirmar Autorización
+                    </button>
+                </>
             )}
 
+            {/* ESTADO: AUTORIZADA */}
             {req.estado === 'autorizada' && (
-                <div className="space-y-3">
-                    <div className="p-3 bg-green-50 text-green-800 text-xs rounded border border-green-100">
-                        <strong>Estado:</strong> Autorizada. En proceso de compra o entrega.
-                    </div>
-                    <div className="flex gap-3 justify-end flex-wrap">
-                        <button onClick={() => window.open(`/requisiciones/${req.id}/imprimir`, '_blank')} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded text-xs hover:bg-gray-50">🖨️ Imprimir Formato Final</button>
-                        <button onClick={() => handleDecision("material_entregado")} className="bg-gray-800 text-white px-4 py-2 rounded text-xs shadow hover:bg-gray-900">📦 Material Entregado / Finalizar</button>
-                    </div>
-                </div>
+                <>
+                    {/* Botón Regresar Solicitado */}
+                    <button onClick={() => handleDecision("suficiencia")} className="text-gray-500 hover:text-gray-800 font-semibold text-sm px-3 transition-colors mr-2">
+                        « Regresar a Suficiencia
+                    </button>
+
+                    <div className="h-8 w-px bg-gray-300 mx-2"></div>
+
+                    <button onClick={() => window.open(`#/requisiciones/${req.id}/imprimir`, '_blank')} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-xs font-bold hover:bg-gray-50 transition-colors">
+                        🖨️ Imprimir Formato Final
+                    </button>
+                    <button onClick={() => handleDecision("material_entregado")} className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-bold shadow-md hover:bg-black transition-colors ml-2">
+                        📦 Finalizar / Archivar
+                    </button>
+                </>
             )}
 
              {req.estado === 'material_entregado' && (
-                <div className="p-3 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200 text-center">
-                    Esta requisición ha sido cerrada y archivada.
+                <div className="px-4 py-2 bg-gray-100 text-gray-500 text-xs font-bold rounded border border-gray-200">
+                    EXPEDIENTE CERRADO
                 </div>
             )}
          </section>

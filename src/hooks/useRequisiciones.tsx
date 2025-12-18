@@ -1,4 +1,4 @@
-// src/hooks/useRequisiciones.tsx
+// FILE: src/hooks/useRequisiciones.tsx
 import {
   createContext,
   useContext,
@@ -36,7 +36,9 @@ export type Requisicion = {
   folio: string;
   fecha: string;
   tipoMaterial: string;
-  secretariaNombre: string;
+  subTipoMaterial?: string;
+  organoRequirente: string; // RENOMBRADO (Antes secretariaNombre)
+  titularNombre: string;    // NUEVO
   direccion: string;
   responsableNombre: string;
   responsableTelefono: string;
@@ -48,10 +50,13 @@ export type Requisicion = {
   revisadaPor?: { uid: string; email: string };
 };
 
+// El formulario debe coincidir con estos nombres
 export type RequisicionFormData = {
   fecha: string;
   tipoMaterial: string;
-  secretariaNombre: string;
+  subTipoMaterial: string;
+  organoRequirente: string; // FIX
+  titularNombre: string;    // FIX
   direccion: string;
   responsableNombre: string;
   responsableTelefono: string;
@@ -69,10 +74,9 @@ type Ctx = {
 };
 
 const RequisicionesContext = createContext<Ctx | null>(null);
-const STORAGE_KEY = "oficialia_requisiciones_v1";
+const STORAGE_KEY = "oficialia_requisiciones_v3"; // Incrementamos versión para limpiar caché vieja
 
 export function RequisicionesProvider({ children }: { children: ReactNode }) {
-  // FIREBASE_TODO: En el futuro, este state se reemplazará por un listener de onSnapshot
   const [requisiciones, setRequisiciones] = useState<Requisicion[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -88,12 +92,10 @@ export function RequisicionesProvider({ children }: { children: ReactNode }) {
   }, [requisiciones]);
 
   const crearRequisicion: Ctx["crearRequisicion"] = (data, creador, opciones) => {
-    // FIREBASE_TODO: Reemplazar con addDoc(collection(db, 'requisiciones'), ...)
     const id = typeof crypto !== "undefined" && "randomUUID" in crypto 
        ? crypto.randomUUID() 
        : `req-${Date.now()}`;
        
-    // Generador de folio simple (En Firebase usaríamos una Transaction o Cloud Function)
     const year = new Date().getFullYear();
     const prefix = `REQ-${year}-`;
     const correlativos = requisiciones
@@ -107,7 +109,9 @@ export function RequisicionesProvider({ children }: { children: ReactNode }) {
       folio,
       fecha: data.fecha,
       tipoMaterial: data.tipoMaterial,
-      secretariaNombre: data.secretariaNombre,
+      subTipoMaterial: data.subTipoMaterial,
+      organoRequirente: data.organoRequirente, // Mapeo directo
+      titularNombre: data.titularNombre,       // Mapeo directo
       direccion: data.direccion,
       responsableNombre: data.responsableNombre,
       responsableTelefono: data.responsableTelefono,
@@ -117,22 +121,19 @@ export function RequisicionesProvider({ children }: { children: ReactNode }) {
       creadoPor: creador,
     };
 
-    setRequisiciones((prev) => [...prev, nueva]);
+    setRequisiciones((prev) => [nueva, ...prev]);
     return nueva;
   };
 
   const actualizarRequisicion: Ctx["actualizarRequisicion"] = (id, data) => {
-    // FIREBASE_TODO: Reemplazar con updateDoc(doc(db, 'requisiciones', id), data)
     setRequisiciones((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
   };
 
   const eliminarBorrador: Ctx["eliminarBorrador"] = (id) => {
-    // FIREBASE_TODO: Reemplazar con deleteDoc(...)
     setRequisiciones((prev) => prev.filter((r) => r.id !== id));
   };
 
   const actualizarEstado: Ctx["actualizarEstado"] = (id, nuevoEstado, extras) => {
-    // FIREBASE_TODO: updateDoc con campos específicos
     setRequisiciones((prev) =>
       prev.map((r) =>
         r.id === id
