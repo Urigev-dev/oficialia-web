@@ -1,224 +1,276 @@
-// src/pages/MisRequisiciones.tsx
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useRequisiciones } from "../hooks/useRequisiciones";
 import { useSession } from "../hooks/useSession";
+import { useToast } from "../hooks/useToast";
+import ConfirmModal from "../components/ui/ConfirmModal";
+import { 
+  FileText, 
+  Clock, 
+  CheckCircle, 
+  AlertCircle, 
+  Plus, 
+  Search,
+  Eye,
+  Edit,
+  Trash2,
+  LayoutDashboard
+} from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
 
-function estadoLabel(estado: string) {
-  const map: Record<string, string> = {
-    borrador: "Borrador",
-    en_revision: "En revisión",
-    cotizacion: "Cotización",
-    suficiencia: "Suficiencia presupuestal",
-    autorizada: "Autorizada (Lista para firma)",
-    material_entregado: "Entregada / Finalizada",
-    finalizada: "Finalizada",
-    rechazada: "Rechazada",
-  };
-  return map[estado] || estado;
-}
-
-type TabType = "borradores" | "tramite" | "historial";
+// MODIFICADO: Ajustamos los tipos para la nueva lógica de pestañas
+type TabType = 'por_atender' | 'proceso' | 'finalizadas';
 
 export default function MisRequisiciones() {
-  const { requisiciones, eliminarBorrador } = useRequisiciones();
   const { user } = useSession();
-  
-  const [tab, setTab] = useState<TabType>("tramite"); // Iniciamos en 'tramite' que es lo más común
-  const [busqueda, setBusqueda] = useState("");
+  const { requisiciones, loading, eliminarBorrador } = useRequisiciones(); 
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const lista = useMemo(() => {
-    if (!user) return [];
-    
-    // 1. Filtrar las propias
-    let data = requisiciones.filter((r) => r.creadoPor?.uid === user.uid);
+  // MODIFICADO: Estado inicial apuntando a la nueva pestaña principal
+  const [activeTab, setActiveTab] = useState<TabType>('por_atender');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-    // 2. Filtrar por Pestaña
-    data = data.filter(r => {
-        if (tab === "borradores") {
-            return r.estado === "borrador";
-        }
-        if (tab === "tramite") {
-            // Incluye todo el ciclo activo hasta antes de la entrega física
-            return ["en_revision", "cotizacion", "suficiencia", "autorizada"].includes(r.estado);
-        }
-        if (tab === "historial") {
-            return ["material_entregado", "finalizada", "rechazada"].includes(r.estado);
-        }
-        return false;
-    });
+  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Cargando tus trámites...</div>;
 
-    // 3. Búsqueda
-    if (busqueda.trim()) {
-        const lower = busqueda.toLowerCase();
-        data = data.filter(r => 
-            r.folio.toLowerCase().includes(lower) || 
-            r.tipoMaterial.toLowerCase().includes(lower)
-        );
+  // Filtrado Base: Solo mis documentos
+  const misDocs = requisiciones.filter(req => req.creadoPor?.uid === user?.uid);
+
+  // Lógica de filtrado para la lista visible
+  const filteredData = misDocs.filter(req => {
+    // Filtro por Buscador
+    if (searchTerm) {
+      const match = (req.folio || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (req.area || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (req.tipoMaterial || "").toLowerCase().includes(searchTerm.toLowerCase());
+      if (!match) return false;
     }
 
-    // 4. Ordenar por fecha desc (lo más nuevo arriba)
-    return data.sort((a, b) => b.fecha.localeCompare(a.fecha));
-  }, [requisiciones, user, busqueda, tab]);
+    // MODIFICADO: Nueva lógica de agrupación de estados
+    switch (activeTab) {
+      case 'por_atender': 
+        // REGLA 1: Solo Borradores. Lo único que está "vivo" en manos del usuario para editar.
+        return ['borrador'].includes(req.estado);
 
-  // Contadores para badges
-  const getCount = (tipo: TabType) => {
-      if (!user) return 0;
-      const propias = requisiciones.filter((r) => r.creadoPor?.uid === user.uid);
-      if (tipo === "borradores") return propias.filter(r => r.estado === "borrador").length;
-      if (tipo === "tramite") return propias.filter(r => ["en_revision", "cotizacion", "suficiencia", "autorizada"].includes(r.estado)).length;
-      if (tipo === "historial") return propias.filter(r => ["material_entregado", "finalizada", "rechazada"].includes(r.estado)).length;
-      return 0;
+      case 'proceso':
+        // Muestra lo que está en manos de la administración
+        return ['en_revision', 'cotizacion', 'suficiencia'].includes(req.estado);
+
+      case 'finalizadas':
+        // REGLA 2: Incluye Éxito (Autorizada/Finalizada) y Fracaso (Rechazada)
+        // Ambos son ciclos concluidos.
+        return ['autorizada', 'finalizada', 'material_entregado', 'rechazada'].includes(req.estado);
+
+      default:
+        return true;
+    }
+  });
+
+  // --- CÁLCULO DE CONTADORES ACTUALIZADO ---
+  const counts = {
+    por_atender: misDocs.filter(r => ['borrador'].includes(r.estado)).length,
+    proceso: misDocs.filter(r => ['en_revision', 'cotizacion', 'suficiencia'].includes(r.estado)).length,
+    finalizadas: misDocs.filter(r => ['autorizada', 'finalizada', 'material_entregado', 'rechazada'].includes(r.estado)).length
   };
 
+  const handleDelete = async () => {
+    if (deleteId) {
+      // Reutilizamos eliminarBorrador (deleteDoc) que funciona para cualquier doc propio
+      await eliminarBorrador(deleteId);
+      toast("Solicitud eliminada correctamente", "success");
+      setDeleteId(null);
+    }
+  };
+
+  // MODIFICADO: Configuración de pestañas con nuevos nombres e iconos
+  const tabs = [
+    { id: 'por_atender', label: 'Por Atender', icon: AlertCircle, count: counts.por_atender },
+    { id: 'proceso', label: 'En Proceso', icon: Clock, count: counts.proceso },
+    { id: 'finalizadas', label: 'Finalizadas', icon: CheckCircle, count: counts.finalizadas },
+  ];
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h2 className="text-xl font-bold text-ink">Mis requisiciones</h2>
-            <p className="text-sm text-ink/70">
-            Seguimiento de tus solicitudes de material.
-            </p>
+    <React.Fragment>
+      {/* MODAL REUTILIZADO: Mantenemos el mismo componente y mensajes 
+        como se solicitó, ya que la acción destructiva es idéntica.
+      */}
+      <ConfirmModal
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Eliminar Solicitud" 
+        message="¿Estás seguro de que deseas eliminar esta solicitud permanentemente? Esta acción no se puede deshacer."
+      />
+
+      <div className="space-y-6 pb-20">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Mis Trámites</h1>
+            <p className="text-sm text-gray-500">Consulta el estado de tus solicitudes.</p>
+          </div>
+          <Button icon={Plus} onClick={() => navigate('/nueva')}>
+            Nueva Solicitud
+          </Button>
         </div>
-        
-        {/* BUSCADOR */}
-        <div className="relative w-full md:w-64">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-            <input 
-                type="text" 
-                placeholder="Buscar por folio..." 
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-border text-sm focus:ring-2 focus:ring-brand focus:outline-none"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-            />
+
+        {/* Buscador */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <input 
+            type="text" 
+            placeholder="Buscar por folio, área o material..." 
+            className="w-full pl-10 p-3 bg-white border border-gray-200 rounded-xl outline-none shadow-sm focus:ring-2 focus:ring-[var(--color-brand)]/20 transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-      </header>
 
-      {/* PESTAÑAS */}
-      <div className="flex border-b border-border overflow-x-auto">
-        <button
-          onClick={() => setTab("borradores")}
-          className={`px-6 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
-            tab === "borradores" ? "border-gray-500 text-gray-700" : "border-transparent text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <span>✏️ Borradores</span>
-          {getCount("borradores") > 0 && <span className="bg-gray-200 text-gray-700 px-2 rounded-full text-[10px]">{getCount("borradores")}</span>}
-        </button>
-
-        <button
-          onClick={() => setTab("tramite")}
-          className={`px-6 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
-            tab === "tramite" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <span>🔄 En Trámite</span>
-          {getCount("tramite") > 0 && <span className="bg-blue-100 text-blue-700 px-2 rounded-full text-[10px]">{getCount("tramite")}</span>}
-        </button>
-
-        <button
-          onClick={() => setTab("historial")}
-          className={`px-6 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
-            tab === "historial" ? "border-green-600 text-green-700" : "border-transparent text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <span>📂 Historial</span>
-          {getCount("historial") > 0 && <span className="bg-green-100 text-green-700 px-2 rounded-full text-[10px]">{getCount("historial")}</span>}
-        </button>
-      </div>
-
-      {lista.length === 0 ? (
-        <div className="bg-surface rounded-[--radius-xl] shadow-[--shadow-card] p-12 text-center text-sm text-ink/70">
-          <div className="text-4xl mb-3 opacity-30">📭</div>
-          {busqueda ? "No se encontraron resultados." : 
-           tab === 'borradores' ? "No tienes borradores pendientes." :
-           tab === 'tramite' ? "No tienes solicitudes en trámite actualmente." :
-           "No tienes historial de solicitudes finalizadas."}
+        {/* Pestañas con Contadores */}
+        <div className="flex overflow-x-auto border-b border-gray-200 no-scrollbar">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as TabType)}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={`ml-2 text-xs py-0.5 px-2 rounded-full ${
+                  activeTab === tab.id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-      ) : (
-        <section className="bg-surface rounded-[--radius-xl] shadow-[--shadow-card] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead className="bg-bg border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Folio</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Fecha</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Tipo</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Estado</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Avisos</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {lista.map((r) => {
-                const tieneObs = !!r.revisionNotas || r.lineas?.some((l) => l.observacionRevision);
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-mono font-medium">{r.folio}</td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{r.fecha}</td>
-                    <td className="px-4 py-3 capitalize">{r.tipoMaterial}</td>
-                    <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${
-                             r.estado === 'borrador' ? 'bg-gray-100 text-gray-600 border-gray-200' :
-                             r.estado === 'en_revision' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                             r.estado === 'cotizacion' ? 'bg-blue-50 text-blue-800 border-blue-200' :
-                             r.estado === 'suficiencia' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
-                             r.estado === 'autorizada' ? 'bg-green-50 text-green-800 border-green-200' :
-                             r.estado === 'rechazada' ? 'bg-red-50 text-red-800 border-red-200' :
-                             'bg-gray-200 text-gray-800 border-gray-300'
-                        }`}>
-                            {estadoLabel(r.estado)}
+
+        {/* Lista de Resultados */}
+        <div className="min-h-[300px]">
+          {filteredData.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
+              <div className="inline-flex p-4 rounded-full bg-gray-50 mb-4">
+                <LayoutDashboard className="text-gray-400" size={32} />
+              </div>
+              <p className="text-gray-900 font-medium">No hay solicitudes en esta sección.</p>
+              {activeTab === 'por_atender' && (
+                <button onClick={() => navigate('/nueva')} className="mt-2 text-sm text-[var(--color-brand)] font-medium hover:underline">
+                  Crear una nueva solicitud
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredData.map((req) => (
+                <div key={req.id} className="group bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row gap-4 items-start md:items-center">
+                  
+                  {/* Icono de estado visual */}
+                  <div className={`p-3 rounded-full shrink-0 ${
+                    req.estado === 'borrador' ? 'bg-gray-100 text-gray-500' :
+                    req.estado === 'autorizada' || req.estado === 'finalizada' ? 'bg-emerald-50 text-emerald-600' :
+                    req.estado === 'rechazada' ? 'bg-red-50 text-red-600' :
+                    'bg-blue-50 text-blue-600'
+                  }`}>
+                    <FileText size={24} />
+                  </div>
+
+                  <div className="flex-1 w-full space-y-1">
+                     <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-bold text-xs text-gray-500">{req.folio || 'SIN FOLIO'}</span>
+                        <Badge variant={
+                            req.estado === 'autorizada' || req.estado === 'finalizada' ? 'success' : 
+                            req.estado === 'rechazada' ? 'danger' : 
+                            req.estado === 'borrador' ? 'neutral' : 'warning'
+                        }>
+                            {req.estado.replace('_', ' ')}
+                        </Badge>
+                     </div>
+                     <h3 className="font-bold text-gray-900 text-sm md:text-base">{req.tipoMaterial}</h3>
+                     {req.subTipoMaterial && <p className="text-xs text-gray-500">{req.subTipoMaterial}</p>}
+                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                        <span className="flex items-center gap-1">
+                           <Clock size={12} /> 
+                           {req.createdAt?.seconds 
+                              ? new Date(req.createdAt.seconds * 1000).toLocaleDateString() 
+                              : "Reciente"}
                         </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {tieneObs && r.estado === 'borrador' && (
-                        <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                          ⚠️ Corregir
-                        </span>
-                      )}
-                      {tieneObs && r.estado !== 'borrador' && r.estado !== 'autorizada' && r.estado !== 'material_entregado' && (
-                         <span className="text-[10px] text-amber-600 font-medium">Observaciones activas</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 space-x-3">
-                      {/* Lógica de botones según pestaña/estado */}
-                      
-                      {/* 1. Ver detalle (Siempre disponible) */}
-                      <Link to={`/requisiciones/${r.id}`} className="text-brand hover:underline font-medium">
-                        Ver detalle
-                      </Link>
+                     </div>
+                  </div>
 
-                      {/* 2. Editar/Borrar (Solo borradores) */}
-                      {r.estado === "borrador" && (
+                  <div className="w-full md:w-auto flex gap-2 justify-end self-center">
+                     
+                     {/* CASO 1: BORRADOR (Editar + Eliminar) */}
+                     {req.estado === 'borrador' && (
+                         <>
+                           <Button 
+                             variant="outline" 
+                             size="sm" 
+                             icon={Edit}
+                             onClick={() => navigate(`/nueva?edit=${req.id}`)}
+                             className="w-full md:w-auto"
+                           >
+                             Editar
+                           </Button>
+                           <button 
+                             onClick={() => setDeleteId(req.id)}
+                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                             title="Eliminar borrador"
+                           >
+                             <Trash2 size={18} />
+                           </button>
+                         </>
+                     )}
+
+                     {/* CASO 2: RECHAZADA (Ver Detalle + Eliminar para limpiar) - NO EDITAR */}
+                     {req.estado === 'rechazada' && (
                         <>
-                          <Link to={`/nueva?id=${r.id}`} className="text-blue-600 hover:underline">
-                            Editar
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if(window.confirm("¿Eliminar borrador permanentemente?")) eliminarBorrador(r.id);
-                            }}
-                            className="text-red-600 hover:underline"
-                          >
-                            Eliminar
-                          </button>
+                           <Button 
+                             variant="ghost" 
+                             size="sm" 
+                             icon={Eye}
+                             onClick={() => navigate(`/requisiciones/${req.id}`)}
+                             className="w-full md:w-auto border border-red-100 text-red-700 bg-red-50"
+                           >
+                             Ver Motivo
+                           </Button>
+                           <button 
+                             onClick={() => setDeleteId(req.id)}
+                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                             title="Eliminar del historial"
+                           >
+                             <Trash2 size={18} />
+                           </button>
                         </>
-                      )}
+                     )}
 
-                      {/* 3. Imprimir (Solo Autorizada o Entregada) */}
-                      {(r.estado === "autorizada" || r.estado === "material_entregado") && (
-                        <Link to={`/requisiciones/${r.id}/imprimir`} target="_blank" className="text-green-700 hover:underline flex items-center gap-1 inline-flex font-semibold">
-                          🖨️ Formato
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-      )}
-    </div>
+                     {/* CASO 3: RESTO DE ESTADOS (Solo Ver) */}
+                     {!['borrador', 'rechazada'].includes(req.estado) && (
+                         <Button 
+                           variant="ghost" 
+                           size="sm" 
+                           icon={Eye}
+                           onClick={() => navigate(`/requisiciones/${req.id}`)}
+                           className="w-full md:w-auto border border-gray-200"
+                         >
+                           Ver Detalle
+                         </Button>
+                     )}
+
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </React.Fragment>
   );
 }

@@ -1,144 +1,222 @@
-// FILE: src/pages/RequisicionPrint.tsx
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useRequisiciones } from "../hooks/useRequisiciones";
+import { useSession } from "../hooks/useSession"; // Importamos useSession para validar el rol
+import { Printer, X } from "lucide-react";
 
 export default function RequisicionPrint() {
   const { id } = useParams<{ id: string }>();
   const { requisiciones } = useRequisiciones();
+  const { role } = useSession(); // Obtenemos el rol actual
   const req = requisiciones.find((r) => r.id === id);
 
   useEffect(() => {
-    if (req && req.estado !== "borrador") {
-      setTimeout(() => window.print(), 800);
-    }
+    if (req) setTimeout(() => window.print(), 800);
   }, [req]);
 
-  if (!req) return <div>Cargando...</div>;
+  if (!req) return <div className="p-8 text-center font-bold">Preparando formato oficial...</div>;
 
-  const items = req.lineas.filter(l => (l.cantidadAutorizada ?? l.cantidad) > 0);
+  const isAlmacen = role === 'almacen';
+
+  // LÓGICA DE FILTRADO:
+  // Si es Almacén: Solo mostrar items con cantidadAutorizada > 0.
+  // Si es otro rol: Mostrar todos los items (incluso los de 0 para ver qué se rechazó).
+  const items = isAlmacen 
+      ? req.lineas.filter(l => (l.cantidadAutorizada ?? 0) > 0)
+      : req.lineas;
+
+  const formatoFechaUTC = (fechaString: string) => {
+      if (!fechaString) return "SIN FECHA";
+      const [anio, mes, dia] = fechaString.split('-');
+      const fecha = new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia));
+      return fecha.toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
 
   return (
-    <div className="bg-white text-black p-8 mx-auto text-[9px] font-sans h-screen w-full max-w-[21.59cm] leading-tight">
+    <div className="bg-white text-black min-h-screen w-full max-w-[21.59cm] mx-auto p-8 print:p-0 print:m-0 font-sans text-xs">
       
-      {/* HEADER OFICIAL: Logos a color */}
-      <header className="flex justify-between items-center mb-4 border-b-2 border-black pb-3">
-        <div className="w-32 flex-shrink-0">
-            {/* FIX: Se quitó 'grayscale' */}
-            <img src="./logo-tapachula.jpeg" alt="Logo" className="w-full object-contain" />
+      {/* --- BOTONES FLOTANTES --- */}
+      <div className="print:hidden fixed top-4 right-4 z-50 flex flex-col gap-2">
+        <button 
+            onClick={() => window.close()} 
+            className="bg-white text-gray-700 border border-gray-300 px-5 py-3 rounded-full shadow-lg flex items-center gap-2 font-bold hover:bg-gray-50 transition-all"
+        >
+            <X size={18} /> Cerrar
+        </button>
+
+        <button 
+            onClick={() => window.print()} 
+            className="bg-gray-900 text-white px-5 py-3 rounded-full shadow-xl flex items-center gap-2 font-bold hover:scale-105 transition-transform"
+        >
+            <Printer size={18} /> Imprimir
+        </button>
+      </div>
+
+      {/* ENCABEZADO */}
+      <header className="flex justify-between items-start mb-6 border-b-2 border-black pb-2">
+        <div className="w-1/5">
+             <img src="/logo-tapachula.jpeg" alt="Logo" className="h-20 object-contain" />
         </div>
-        <div className="text-center flex-1 px-2">
-            <h1 className="font-black text-base uppercase tracking-widest mb-1">H. Ayuntamiento de Tapachula</h1>
-            <h2 className="font-bold text-[10px] uppercase text-gray-600 tracking-wide">Oficialía Mayor</h2>
-            <div className="mt-2 px-6 py-1 bg-black text-white inline-block font-bold text-[9px] tracking-wider rounded-sm">
-                REQUISICIÓN DE MATERIALES Y SERVICIOS
+        <div className="flex-1 text-center pt-4">
+            <h3 className="text-xl font-bold uppercase mt-2">H. Ayuntamiento de Tapachula</h3>
+            <h4 className="text-sm font-bold uppercase">Oficialía Mayor</h4>
+            <div className="mt-2 bg-black text-white px-4 py-1 inline-block font-bold text-sm uppercase rounded-sm">
+                {/* Si es almacén, cambiamos el título para que sea más específico, o lo dejamos igual */}
+                {isAlmacen ? "Orden de Surtido de Materiales" : "Requisición de Materiales y Servicios"}
             </div>
         </div>
-        <div className="w-32 flex-shrink-0 text-right">
-            {/* FIX: Se quitó 'grayscale' */}
-            <img src="./oficialia.jpeg" alt="Oficialía" className="w-full object-contain mb-2" />
+        <div className="w-1/5 flex justify-end">
+             <img src="/oficialia.jpeg" alt="Oficialía" className="h-20 object-contain" />
         </div>
       </header>
 
       {/* DATOS GENERALES */}
-      <div className="border-2 border-black mb-4">
-          <div className="flex border-b border-black">
-              <div className="w-1/4 border-r border-black p-1 bg-gray-100 font-bold flex flex-col justify-center text-center">
-                  <div className="text-[8px] text-gray-500">FECHA DE SOLICITUD</div>
-                  <div className="font-mono text-xs">{req.fecha}</div>
-                  
-                  <div className="mt-2 text-[8px] text-gray-500">FOLIO</div>
-                  <div className="font-black text-sm text-red-800 tracking-wide">{req.folio}</div>
+      <div className="grid grid-cols-3 gap-4 mb-6">
+          {/* Columna Izquierda */}
+          <div className="col-span-2 space-y-2 border border-black p-2">
+              <div className="grid grid-cols-3 gap-2">
+                  <span className="font-bold uppercase text-right">Órgano Requirente:</span>
+                  <span className="col-span-2 border-b border-gray-400 uppercase">{req.organoRequirente}</span>
               </div>
-              
-              <div className="w-3/4 flex flex-col">
-                  <div className="flex border-b border-black h-8 items-center">
-                      <div className="w-28 bg-gray-50 p-1 pl-2 font-bold border-r border-gray-300 text-[8px] uppercase tracking-wide h-full flex items-center">Órgano Requirente:</div>
-                      <div className="flex-1 p-1 pl-2 uppercase font-bold text-[9px]">{req.organoRequirente}</div>
+              <div className="grid grid-cols-3 gap-2">
+                  <span className="font-bold uppercase text-right">Área:</span>
+                  <span className="col-span-2 border-b border-gray-400 uppercase">{req.area}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                  <span className="font-bold uppercase text-right">Tipo de Material:</span>
+                  <span className="col-span-2 border-b border-gray-400 uppercase text-[10px] leading-tight">
+                      {req.subTipoMaterial || req.tipoMaterial}
+                  </span>
+              </div>
+
+              {/* CAMBIO 1: Mostrar Proveedor solo si es Almacén y existe el dato */}
+              {isAlmacen && req.proveedor && (
+                  <div className="grid grid-cols-3 gap-2">
+                      <span className="font-bold uppercase text-right">Proveedor:</span>
+                      <span className="col-span-2 border-b border-gray-400 uppercase font-bold">
+                          {req.proveedor}
+                      </span>
                   </div>
-                  <div className="flex border-b border-black h-8 items-center">
-                      <div className="w-28 bg-gray-50 p-1 pl-2 font-bold border-r border-gray-300 text-[8px] uppercase tracking-wide h-full flex items-center">Dirección / Área:</div>
-                      <div className="flex-1 p-1 pl-2 uppercase text-[9px]">{req.direccion}</div>
-                  </div>
-                  <div className="flex h-8 items-center">
-                      <div className="w-28 bg-gray-50 p-1 pl-2 font-bold border-r border-gray-300 text-[8px] uppercase tracking-wide h-full flex items-center">Tipo de Material:</div>
-                      <div className="flex-1 p-1 pl-2 uppercase text-[9px] font-medium">{req.tipoMaterial} <span className="text-gray-400 mx-1">|</span> {req.subTipoMaterial}</div>
-                  </div>
+              )}
+          </div>
+
+          {/* Columna Derecha */}
+          <div className="col-span-1 space-y-4">
+              <div className="border border-black p-2 text-center">
+                  <p className="font-bold uppercase text-[10px] mb-1">Fecha de Solicitud</p>
+                  <p className="font-mono text-sm font-bold">{formatoFechaUTC(req.fechaSolicitud)}</p>
+              </div>
+              <div className="border border-black p-2 text-center bg-gray-100">
+                  <p className="font-bold uppercase text-[10px] mb-1">Folio</p>
+                  <p className="font-mono text-sm font-bold text-red-600">{req.folio}</p>
               </div>
           </div>
       </div>
 
-      {/* TABLA DE ÍTEMS */}
-      <table className="w-full border-collapse border-2 border-black mb-4">
-          <thead>
-              <tr className="bg-gray-100 text-center font-bold border-b-2 border-black text-[8px] tracking-wider">
-                  <th className="border-r border-black p-1 w-14">CANT.<br/>SOLIC.</th>
-                  <th className="border-r border-black p-1 w-14 bg-gray-200">CANT.<br/>AUT.</th>
-                  <th className="border-r border-black p-1 w-20">UNIDAD</th>
-                  <th className="border-r border-black p-1 w-1/4">CONCEPTO</th>
-                  <th className="p-1">DESCRIPCIÓN</th>
-              </tr>
-          </thead>
-          <tbody>
-              {items.map((l, i) => (
-                  <tr key={i} className="border-b border-gray-300 text-[9px]">
-                      <td className="border-r border-black p-1 text-center align-top pt-2 font-medium">{l.cantidad}</td>
-                      <td className="border-r border-black p-1 text-center align-top pt-2 font-bold bg-gray-50 text-[10px]">
-                        {l.cantidadAutorizada ?? l.cantidad}
-                      </td>
-                      <td className="border-r border-black p-1 text-center uppercase text-[8px] align-top pt-2">{l.unidad}</td>
-                      <td className="border-r border-black p-1 align-top pt-2 px-2">
-                          <span className="font-bold uppercase tracking-tight">{l.concepto}</span>
-                      </td>
-                      <td className="p-1 align-top pt-2 px-2">
-                          <span className="uppercase text-gray-600 text-[8px]">{l.descripcion}</span>
-                      </td>
-                  </tr>
-              ))}
-              {Array.from({length: Math.max(0, 10 - items.length)}).map((_, i) => (
-                  <tr key={`empty-${i}`} className="h-6 border-b border-gray-200">
-                      <td className="border-r border-black"></td><td className="border-r border-black bg-gray-50"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
-                  </tr>
-              ))}
-          </tbody>
-      </table>
+      {/* TABLA DE ITEMS */}
+      <div className="mb-6">
+        <table className="w-full border-collapse border border-black text-[10px]">
+            <thead>
+                <tr className="bg-gray-200 text-black text-center">
+                    {/* CAMBIO 2: Ocultar columna CANT. SOLIC. si es Almacén */}
+                    {!isAlmacen && (
+                        <th className="border border-black px-1 py-2 w-12">CANT.<br/>SOLIC.</th>
+                    )}
+                    
+                    <th className="border border-black px-1 py-2 w-12">CANT.<br/>AUT.</th>
+                    <th className="border border-black px-1 py-2 w-16">UNIDAD</th>
+                    <th className="border border-black px-2 py-2 w-1/4">CONCEPTO</th>
+                    <th className="border border-black px-2 py-2">DESCRIPCIÓN</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items.map((item, idx) => {
+                    // Estilo tachado rojo para items en 0 (solo visible para no-almacén, ya que almacén filtra los ceros)
+                    const isRejected = !isAlmacen && item.cantidadAutorizada === 0;
+                    const cellStyle = isRejected ? "text-red-600 line-through decoration-red-600" : "text-black";
 
-      {/* JUSTIFICACIÓN */}
-      <div className="border-2 border-black mb-8 relative">
-          <div className="p-3 min-h-[60px] text-[9px] uppercase italic bg-white text-justify leading-snug">
-              <span className="font-bold text-gray-400 text-[8px] not-italic block mb-1">JUSTIFICACIÓN:</span>
-              {req.justificacion}
-          </div>
-          <div className="border-t border-black p-1.5 flex justify-between bg-gray-100 px-4 text-[8px] uppercase font-bold tracking-wide">
-              <span>RESPONSABLE: <span className="font-normal text-black ml-1">{req.responsableNombre}</span></span>
-              <span>TEL: <span className="font-normal text-black ml-1">{req.responsableTelefono}</span></span>
+                    return (
+                        <tr key={idx} className="text-center align-top">
+                            {/* Ocultar celda CANT. SOLIC. si es Almacén */}
+                            {!isAlmacen && (
+                                <td className="border border-black px-1 py-2 font-bold text-black">{item.cantidad}</td>
+                            )}
+                            
+                            <td className={`border border-black px-1 py-2 font-bold bg-gray-50 ${cellStyle}`}>
+                                {item.cantidadAutorizada ?? ''}
+                            </td>
+                            <td className={`border border-black px-1 py-2 uppercase ${cellStyle}`}>
+                                {item.unidad}
+                            </td>
+                            <td className={`border border-black px-2 py-2 uppercase text-left font-bold ${cellStyle}`}>
+                                {item.concepto}
+                            </td>
+                            <td className={`border border-black px-2 py-2 uppercase text-left text-[9px] ${cellStyle}`}>
+                                {item.descripcion}
+                            </td>
+                        </tr>
+                    );
+                })}
+                
+                {/* Filas vacías para mantener estructura visual */}
+                {Array.from({ length: Math.max(0, 5 - items.length) }).map((_, i) => (
+                    <tr key={`empty-${i}`} className="h-8">
+                        {!isAlmacen && <td className="border border-black"/>}
+                        <td className="border border-black"/><td className="border border-black"/><td className="border border-black"/><td className="border border-black"/>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
+
+      {/* JUSTIFICACIÓN CON CONTACTO */}
+      <div className="mb-8 border border-black p-2 min-h-[80px]">
+          <p className="font-bold uppercase text-xs mb-1">Justificación:</p>
+          <p className="text-xs uppercase leading-snug mb-4">{req.justificacion}</p>
+          
+          <div className="flex gap-8 mt-2 pt-2 border-t border-gray-300 text-[10px]">
+              <div>
+                  <span className="font-bold">RESPONSABLE / CONTACTO: </span>
+                  <span className="uppercase">{req.responsableNombre}</span>
+              </div>
+              <div>
+                  <span className="font-bold">TELÉFONO: </span>
+                  <span>{req.responsableTelefono}</span>
+              </div>
           </div>
       </div>
 
       {/* FIRMAS */}
-      <div className="grid grid-cols-3 gap-6 mt-12 text-center text-[9px]">
-          <div className="flex flex-col justify-end h-28">
-              <div className="font-bold mb-auto tracking-widest text-[8px]">SOLICITA</div>
-              <div className="border-t border-black pt-2">
-                  <div className="font-bold uppercase">{req.titularNombre}</div>
-                  <div className="text-[7px] uppercase font-medium text-gray-600 mt-0.5">TITULAR DEL ÁREA DE {req.organoRequirente}</div>
+      <div className="mt-auto break-inside-avoid">
+          <div className="grid grid-cols-3 gap-4 items-end">
+              
+              {/* COLUMNA 1: SOLICITA */}
+              <div className="text-center">
+                  <div className="font-bold uppercase text-[10px] mb-8">SOLICITA</div>
+                  <div className="border-b border-black w-3/4 mx-auto mb-1"></div>
+                  <p className="font-bold uppercase text-[9px] px-2">{req.titularNombre}</p>
+                  <p className="text-[8px] uppercase text-gray-600">Titular de {req.organoRequirente}</p>
               </div>
-          </div>
-          <div className="flex flex-col justify-end h-28">
-              <div className="font-bold mb-auto tracking-widest text-[8px]">Vo. Bo.</div>
-              <div className="border-t border-black pt-2">
-                  <div className="font-bold uppercase">LIC. ERICK DANIEL RODAS MORENO</div>
-                  <div className="text-[7px] uppercase font-medium text-gray-600 mt-0.5">DIRECTOR DE ADQUISICIONES</div>
+
+              {/* COLUMNA 2: Vo. Bo. */}
+              <div className="text-center">
+                  <div className="font-bold uppercase text-[10px] mb-8">Vo. Bo.</div>
+                  <div className="border-b border-black w-3/4 mx-auto mb-1"></div>
+                  <p className="font-bold uppercase text-[9px] px-2">LIC. ERICK DANIEL RODAS MORENO</p>
+                  <p className="text-[8px] uppercase text-gray-600">Dirección de Adquisiciones y Servicios</p>
               </div>
-          </div>
-          <div className="flex flex-col justify-end h-28">
-              <div className="font-bold mb-auto tracking-widest text-[8px]">AUTORIZA</div>
-              <div className="border-t border-black pt-2">
-                  <div className="font-bold uppercase">CP. DAYTON VENTURA MONTECINOS</div>
-                  <div className="text-[7px] uppercase font-medium text-gray-600 mt-0.5">OFICIAL MAYOR</div>
+
+              {/* COLUMNA 3: AUTORIZA */}
+              <div className="text-center">
+                  <div className="font-bold uppercase text-[10px] mb-8">AUTORIZA</div>
+                  <div className="border-b border-black w-3/4 mx-auto mb-1"></div>
+                  <p className="font-bold uppercase text-[9px] px-2">CP. DAYTON VENTURA MONTECINOS</p>
+                  <p className="text-[8px] uppercase text-gray-600">Oficial Mayor</p>
               </div>
+
           </div>
       </div>
+
     </div>
   );
 }

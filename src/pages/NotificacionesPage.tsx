@@ -1,91 +1,148 @@
-// src/pages/NotificacionesPage.tsx
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useSession } from "../hooks/useSession";
 import { useNotificaciones } from "../hooks/useNotificaciones";
-import { useRequisiciones } from "../hooks/useRequisiciones";
+import { useRequisiciones } from "../hooks/useRequisiciones"; // Importamos para verificar estado real
+import { CheckCheck, Trash2, Bell, FileText, AlertCircle, Eye } from "lucide-react";
 
 export default function NotificacionesPage() {
   const { user, role } = useSession();
+  const navigate = useNavigate();
   
-  // AGREGAMOS 'marcarLeida' AQUÍ 👇
   const { 
     notificaciones, 
-    eliminarTodas, 
+    limpiarTodas, 
     eliminarNotificacion, 
     marcarTodasLeidas, 
     marcarLeida 
   } = useNotificaciones();
-  
-  const { requisiciones } = useRequisiciones();
 
+  // Obtenemos las requisiciones para consultar el estado en tiempo real
+  const { requisiciones } = useRequisiciones();
+  
   if (!user) return <div className="text-sm p-4">Debes iniciar sesión.</div>;
 
-  // Filtro de Roles (Optimizado)
-  const lista = notificaciones.filter(n => {
-      if (role === 'admin') return true;
-      if (role === 'revision') return n.targetRole === 'revision';
-      if (role === 'solicitud') return n.targetRole === 'solicitud' || !n.targetRole;
-      return false;
-  });
-
   const getAction = (n: any) => {
-     const req = requisiciones.find(r => r.id === n.reqId);
-     if (role === 'solicitud' && req?.estado === 'borrador') {
-         return { label: "Corregir ahora", url: `/nueva?id=${n.reqId}`, priority: true };
+     // Buscamos la requisición real vinculada a esta notificación
+     const reqReal = requisiciones.find(r => r.id === n.reqId);
+     const estadoActual = reqReal?.estado;
+
+     // Lógica para Solicitantes
+     if (role === 'solicitud') {
+         // CASO 1: BORRADOR -> Permite editar (Comportamiento existente)
+         if (estadoActual === 'borrador') {
+             return { label: "Corregir ahora", url: `/nueva?edit=${n.reqId}`, priority: true, icon: <AlertCircle size={14} /> };
+         }
+
+         // CASO 2: RECHAZADA -> Solo lectura (NUEVO COMPORTAMIENTO)
+         // Redirige a la vista de detalle estándar, donde NO se permite edición.
+         if (estadoActual === 'rechazada') {
+             return { label: "Ver motivo", url: `/requisiciones/${n.reqId}`, priority: true, icon: <Eye size={14} /> };
+         }
+
+         // Resto de estados (en_revision, cotizacion, etc.) -> Ver estado
+         return { label: "Ver estado", url: `/requisiciones/${n.reqId}`, priority: false, icon: <FileText size={14} /> };
      }
+
+     // Lógica para Revisores
      if (role === 'revision') {
-         return { label: "Revisar", url: `/requisiciones/${n.reqId}`, priority: true };
+         return { label: "Gestionar", url: `/requisiciones/${n.reqId}`, priority: true, icon: <FileText size={14} /> };
      }
-     return { label: "Ver detalle", url: `/requisiciones/${n.reqId}`, priority: false };
+
+     return { label: "Ver detalle", url: `/requisiciones/${n.reqId}`, priority: false, icon: <FileText size={14} /> };
+  };
+
+  const handleLinkClick = async (e: any, id: string, url: string) => {
+      e.preventDefault(); 
+      await marcarLeida(id);
+      navigate(url);
   };
 
   return (
-    <div className="space-y-4">
-      <header className="flex items-center justify-between">
+    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+      <header className="flex items-center justify-between pb-4 border-b border-gray-100">
         <div>
-            <h2 className="text-xl font-bold text-ink">Bandeja de Entrada</h2>
-            <p className="text-sm text-ink/70">
-                {role === 'revision' ? "Avisos de correcciones recibidas." : "Avisos sobre el estado de tus trámites."}
-            </p>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Bell className="text-[var(--color-brand)]" />
+                Bandeja de Entrada
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">Avisos y actualizaciones de tus trámites</p>
         </div>
-        {lista.length > 0 && (
+        {notificaciones.length > 0 && (
             <div className="flex gap-2">
-                <button onClick={marcarTodasLeidas} className="text-xs text-brand hover:bg-brand-50 px-3 py-1.5 rounded-full border border-brand/20 transition-colors">✓ Marcar leídas</button>
-                <button onClick={eliminarTodas} className="text-xs flex items-center gap-1 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-full border border-transparent hover:border-red-200 transition-colors">🗑️ Limpiar todo</button>
+                <button 
+                    onClick={() => marcarTodasLeidas()} 
+                    className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+                >
+                    <CheckCheck size={14} /> Marcar leídas
+                </button>
+                <button 
+                    onClick={() => limpiarTodas()} 
+                    className="flex items-center gap-1 text-xs font-medium text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                >
+                    <Trash2 size={14} /> Limpiar todo
+                </button>
             </div>
         )}
       </header>
 
-      {lista.length === 0 ? (
-        <div className="bg-surface rounded-[--radius-xl] p-12 text-center shadow-sm">
-           <div className="text-4xl mb-3">📭</div>
-           <p className="text-ink font-medium">Bandeja vacía</p>
-           <p className="text-sm text-ink/60">No tienes notificaciones pendientes.</p>
+      {notificaciones.length === 0 ? (
+        <div className="bg-white rounded-xl p-12 text-center border border-gray-200 shadow-sm">
+           <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Bell className="text-gray-300" size={32} />
+           </div>
+           <p className="text-gray-900 font-medium">Estás al día</p>
+           <p className="text-sm text-gray-500">No tienes notificaciones pendientes.</p>
         </div>
       ) : (
         <ul className="space-y-3">
-          {lista.map((n) => {
+          {notificaciones.map((n) => {
             const action = getAction(n);
             return (
-              <li key={n.id} className={`group relative bg-surface rounded-[--radius-xl] shadow-sm p-4 border-l-4 pr-12 transition-all hover:shadow-md ${!n.leida ? "border-brand bg-red-50/10" : "border-gray-200"}`}>
-                <button onClick={() => eliminarNotificacion(n.id)} className="absolute top-3 right-3 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100" title="Eliminar">✕</button>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="pr-4">
-                    <div className="text-[10px] text-ink/50 mb-1 font-mono uppercase tracking-wider flex items-center gap-2">
-                      <span>{n.folio}</span><span>•</span><span>{new Date(n.fecha).toLocaleDateString()}</span>
-                      {!n.leida && <span className="bg-brand text-white px-1.5 rounded text-[9px]">NUEVA</span>}
+              <li 
+                key={n.id} 
+                className={`group relative bg-white rounded-xl shadow-sm p-5 border transition-all duration-200 hover:shadow-md ${!n.leida ? "border-l-4 border-l-[var(--color-brand)] bg-blue-50/10" : "border-gray-200"}`}
+              >
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  
+                  {/* Contenido Texto */}
+                  <div className="flex-1 pr-0 sm:pr-8">
+                    <div className="flex items-center gap-2 mb-2">
+                        {n.folio && <span className="font-mono text-[10px] font-bold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{n.folio}</span>}
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide">
+                            {n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleDateString() : 'Hoy'}
+                        </span>
+                        {!n.leida && <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm animate-pulse">NUEVA</span>}
                     </div>
-                    <div className="font-bold text-ink text-sm mb-1">{n.mensaje}</div>
+                    <div className="font-medium text-gray-800 text-sm leading-relaxed">
+                        {n.mensaje}
+                    </div>
                   </div>
                   
-                  {/* AQUÍ ESTÁ EL FIX: onClick para marcar como leída al navegar */}
-                  <Link 
-                    to={action.url} 
-                    onClick={() => marcarLeida(n.id)}
-                    className={`shrink-0 text-center px-4 py-2 rounded-lg text-xs font-semibold transition-all ${action.priority ? "bg-brand text-white hover:bg-brand-700 shadow-md" : "bg-white border border-gray-200 text-ink hover:bg-gray-50"}`}
-                  >
-                    {action.label}
-                  </Link>
+                  {/* Acciones */}
+                  <div className="flex items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0 justify-end">
+                      {n.reqId && (
+                          <a 
+                            href={action.url}
+                            onClick={(e) => handleLinkClick(e, n.id, action.url)}
+                            className={`flex items-center gap-1.5 shrink-0 text-center px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm
+                                ${action.priority 
+                                    ? "bg-[var(--color-brand)] text-white hover:brightness-90 hover:shadow" 
+                                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                                }`}
+                          >
+                            {action.icon}
+                            {action.label}
+                          </a>
+                      )}
+                      
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); eliminarNotificacion(n.id); }} 
+                          className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors" 
+                          title="Eliminar"
+                      >
+                          <Trash2 size={16} />
+                      </button>
+                  </div>
                 </div>
               </li>
             );

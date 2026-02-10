@@ -1,0 +1,113 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return hasProfile()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+
+    function role() {
+      return hasProfile() ? userDoc().role : null;
+    }
+
+    function notDisabled() {
+      return hasProfile() && userDoc().disabled != true;
+    }
+
+    // --- ROLES ---
+    function isAdmin() { return notDisabled() && role() == "admin"; }
+    function isDireccion() { return notDisabled() && role() == "direccion"; }
+    function isAutorizacion() { return notDisabled() && role() == "autorizacion"; }
+    function isRevision() { return notDisabled() && role() == "revision"; }
+    function isSolicitud() { return notDisabled() && role() == "solicitud"; }
+    // AGREGADO: Definición del rol Almacén
+    function isAlmacen() { return notDisabled() && role() == "almacen"; }
+
+    // --- PERMISOS AGRUPADOS ---
+    function canManageRequisiciones() {
+      // AGREGADO: isAlmacen() ahora tiene permiso de gestión/lectura
+      return isAdmin() || isDireccion() || isAutorizacion() || isRevision() || isAlmacen();
+    }
+
+    function canSeeAllNotifs() {
+      return isAdmin() || isDireccion() || isAutorizacion();
+    }
+
+    // ====================================================
+    // CONFIGURACIÓN DE FECHAS DE ENVÍO
+    // ====================================================
+    match /configuracion/{docId} {
+      // Todos los usuarios logueados necesitan leer esto para calcular sus fechas en pantalla
+      allow read: if signedIn();
+      // Solo Dirección o Admin pueden modificar las fechas/excepciones
+      allow write: if isDireccion() || isAdmin();
+    }
+
+    // --------------------
+    // USUARIOS
+    // --------------------
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAdmin(); 
+      allow update: if isAdmin() || (request.auth.uid == userId);
+      allow delete: if isAdmin();
+    }
+
+    // --------------------
+    // CONTADORES
+    // --------------------
+    match /counters/{docId} {
+      allow read: if notDisabled();
+      allow write: if isSolicitud() || canManageRequisiciones();
+    }
+
+    // --------------------
+    // REQUISICIONES
+    // --------------------
+    match /requisiciones/{reqId} {
+      allow create: if (isSolicitud() || isAdmin() || isRevision())
+        && request.resource.data.creadoPor.uid == request.auth.uid;
+
+      // Lectura: Dueño del doc O personal de gestión (incluido Almacén)
+      allow read: if canManageRequisiciones()
+        || (resource.data.creadoPor.uid == request.auth.uid);
+
+      // Actualizar: Gestión (incluido Almacén para cambiar estado) o Dueño (solo si borrador)
+      allow update: if (canManageRequisiciones()
+        || (resource.data.creadoPor.uid == request.auth.uid))
+        && (resource.data.creadoPor.uid == request.resource.data.creadoPor.uid); // Evitar cambiar el dueño
+
+      allow delete: if isAdmin()
+        || (resource.data.creadoPor.uid == request.auth.uid);
+    }
+
+    // --------------------
+    // NOTIFICACIONES
+    // --------------------
+    match /notificaciones/{notifId} {
+      allow create: if notDisabled();
+
+      // AGREGADO: Almacén puede leer notificaciones dirigidas a su rol
+      allow read: if canSeeAllNotifs()
+        || (isRevision() && resource.data.targetRole == "revision")
+        || (isAlmacen() && resource.data.targetRole == "almacen")
+        || (resource.data.targetUid == request.auth.uid);
+
+      allow update, delete: if canSeeAllNotifs()
+        || (isRevision() && resource.data.targetRole == "revision")
+        || (isAlmacen() && resource.data.targetRole == "almacen")
+        || (resource.data.targetUid == request.auth.uid);
+    }
+  }
+}

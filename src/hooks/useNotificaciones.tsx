@@ -1,85 +1,150 @@
-// src/hooks/useNotificaciones.tsx
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp, 
+  deleteDoc,
+  writeBatch
+} from "firebase/firestore";
+import { db } from "../firebase/firebase";
+import { useSession, type Role } from "./useSession";
 
-const STORAGE_KEY = "ofm_notificaciones_v1";
-
-export type TipoNotificacion = "estado" | "linea" | "general";
-
-export type Notificacion = {
+export interface Notificacion {
   id: string;
-  reqId: string;
-  folio: string;
+  targetUid?: string;
+  targetRole?: Role;
+  reqId?: string;
+  folio?: string;
   mensaje: string;
-  fecha: string;
-  tipo: TipoNotificacion;
+  // FIX: Agregamos 'success' y 'error' a los tipos permitidos
+  tipo: 'estado' | 'accion' | 'info' | 'success' | 'error';
   leida: boolean;
-  targetRole?: "solicitud" | "revision" | "admin"; 
-};
+  createdAt: any;
+}
 
-type Ctx = {
+type NotificacionesContextValue = {
   notificaciones: Notificacion[];
   pendientes: number;
-  agregarNotificacion: (payload: { reqId: string; folio: string; mensaje: string; tipo?: TipoNotificacion; targetRole?: "solicitud" | "revision" | "admin" }) => void;
-  marcarLeida: (id: string) => void;
-  marcarTodasLeidas: () => void;
-  eliminarTodas: () => void;
-  eliminarNotificacion: (id: string) => void;
+  agregarNotificacion: (data: Omit<Notificacion, "id" | "leida" | "createdAt">) => Promise<void>;
+  marcarLeida: (id: string) => Promise<void>;
+  eliminarNotificacion: (id: string) => Promise<void>;
+  marcarTodasLeidas: () => Promise<void>;
+  limpiarTodas: () => Promise<void>;
 };
 
-const NotificacionesContext = createContext<Ctx | null>(null);
+const NotificacionesContext = createContext<NotificacionesContextValue | null>(null);
 
 export function NotificacionesProvider({ children }: { children: ReactNode }) {
-  // FIREBASE_TODO: Aquí usaremos un query: collection('notificaciones').where('targetRole', '==', userRole)
-  const [notificaciones, setNotificaciones] = useState<Notificacion[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
-  });
-
+  const { user } = useSession();
+  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
+  
+  // Filtramos notificaciones relevantes para el usuario actual
   useEffect(() => {
-    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notificaciones)); } catch {}
-  }, [notificaciones]);
+    if (!user) {
+      setNotificaciones([]);
+      return;
+    }
 
-  const agregarNotificacion: Ctx["agregarNotificacion"] = useCallback(({ reqId, folio, mensaje, tipo = "general", targetRole }) => {
-    // FIREBASE_TODO: addDoc(...)
-    const nueva: Notificacion = {
-      id: `n-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      reqId, folio, mensaje, fecha: new Date().toISOString(), tipo, leida: false, targetRole,
-    };
-    setNotificaciones((prev) => [nueva, ...prev]);
-  }, []);
+    // Consulta base: Notificaciones dirigidas a mi UID
+    const q1 = query(
+      collection(db, "notificaciones"),
+      where("targetUid", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
 
-  const marcarLeida = useCallback((id: string) => {
-    setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));
-  }, []);
+    // Consulta secundaria: Notificaciones dirigidas a mi ROL (si aplica)
+    // Nota: Firestore no soporta "OR" en streams complejos fácilmente sin índices compuestos múltiples.
+    // Para simplificar y ahorrar costos/índices, en este diseño priorizamos targetUid.
+    // Si necesitas broadcast por rol, se puede agregar una lógica de fusión aquí o un segundo listener.
+    
+    // Por ahora usamos el listener principal por UID que es lo más seguro y directo.
+    const unsubscribe = onSnapshot(q1, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Notificacion[];
+      setNotificaciones(data);
+    });
 
-  const marcarTodasLeidas = useCallback(() => {
-    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
-  }, []);
+    return () => unsubscribe();
+  }, [user]);
 
-  const eliminarTodas = useCallback(() => {
-    if (window.confirm("¿Vaciar bandeja?")) setNotificaciones([]);
-  }, []);
+  const pendientes = notificaciones.filter(n => !n.leida).length;
 
-  const eliminarNotificacion = useCallback((id: string) => {
-    setNotificaciones((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+  const agregarNotificacion = async (data: Omit<Notificacion, "id" | "leida" | "createdAt">) => {
+    try {
+      await addDoc(collection(db, "notificaciones"), {
+        ...data,
+        leida: false,
+        createdAt: serverTimestamp()
+      });
+    } catch (e) {
+      console.error("Error al enviar notificación:", e);
+    }
+  };
 
-  // Nota: Este conteo de pendientes actualmente es global local.
-  // En Firebase se hará un count() query.
-  const pendientes = notificaciones.filter((n) => !n.leida).length;
+  const marcarLeida = async (id: string) => {
+    try {
+      await updateDoc(doc(db, "notificaciones", id), { leida: true });
+    } catch (e) { console.error(e); }
+  };
+
+  const eliminarNotificacion = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "notificaciones", id));
+    } catch (e) { console.error(e); }
+  };
+
+  const marcarTodasLeidas = async () => {
+    if (notificaciones.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      let updates = 0;
+      notificaciones.forEach(n => {
+        if (!n.leida) {
+          batch.update(doc(db, "notificaciones", n.id), { leida: true });
+          updates++;
+        }
+      });
+      if (updates > 0) await batch.commit();
+    } catch (e) { console.error(e); }
+  };
+
+  const limpiarTodas = async () => {
+    if (notificaciones.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      notificaciones.forEach(n => {
+        batch.delete(doc(db, "notificaciones", n.id));
+      });
+      await batch.commit();
+    } catch (e) { console.error(e); }
+  };
 
   return (
-    <NotificacionesContext.Provider value={{ notificaciones, pendientes, agregarNotificacion, marcarLeida, marcarTodasLeidas, eliminarTodas, eliminarNotificacion }}>
+    <NotificacionesContext.Provider value={{ 
+      notificaciones, 
+      pendientes, 
+      agregarNotificacion, 
+      marcarLeida, 
+      eliminarNotificacion,
+      marcarTodasLeidas,
+      limpiarTodas
+    }}>
       {children}
     </NotificacionesContext.Provider>
   );
 }
 
 export function useNotificaciones() {
-  const ctx = useContext(NotificacionesContext);
-  if (!ctx) throw new Error("Falta NotificacionesProvider");
-  return ctx;
+  const context = useContext(NotificacionesContext);
+  if (!context) throw new Error("useNotificaciones debe usarse dentro de NotificacionesProvider");
+  return context;
 }

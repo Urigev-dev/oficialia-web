@@ -1,149 +1,213 @@
-// FILE: src/components/layout/AppShell.tsx
-import type { ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
-import { useSession, type Role } from "../../hooks/useSession";
-import { useNotificaciones } from "../../hooks/useNotificaciones";
+import React, { useState } from 'react';
+import { Outlet, Link, useLocation } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  FilePlus2, 
+  FileCheck2, 
+  Users, 
+  LogOut, 
+  Menu, 
+  BellRing,
+  KeyRound,
+  Calendar // <-- NUEVO ICONO IMPORTADO
+} from 'lucide-react';
+import { useSession } from '../../hooks/useSession';
+import { useNotificaciones } from '../../hooks/useNotificaciones';
+import CambioPasswordModal from '../CambioPasswordModal'; 
 
-type NavItem = {
-  label: string;
-  to: string;
-  roles: Role[];
-};
+export default function AppShell() {
+  const { user, logout, role } = useSession(); 
+  const { pendientes } = useNotificaciones(); 
+  
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
-const NAV_ITEMS: NavItem[] = [
-  // ADMIN & DIRECCIÓN (Dashboard solo para ellos)
-  { label: "Dashboard", to: "/", roles: ["direccion", "admin"] },
-  { label: "Gestión de Usuarios", to: "/admin/usuarios", roles: ["admin"] },
+  // MENU DE NAVEGACIÓN
+  const navigation = [
+    { 
+      name: 'Bandeja Revisión', 
+      href: '/revision/requisiciones', 
+      icon: FileCheck2, 
+      roles: ['revision', 'autorizacion', 'direccion', 'admin', 'almacen'] 
+    },
+    { 
+      name: 'Mis Trámites', 
+      href: '/mis-requisiciones', 
+      icon: LayoutDashboard, 
+      roles: ['solicitud', 'admin', 'revision', 'autorizacion', 'direccion', 'almacen'] 
+    },
+    { 
+      name: 'Nueva Solicitud', 
+      href: '/nueva', 
+      icon: FilePlus2, 
+      roles: ['solicitud', 'admin', 'revision'] 
+    },
+    // 👇 NUEVA OPCIÓN AGREGADA 👇
+    {
+      name: 'Fechas de Recepción',
+      href: '/admin/configuracion',
+      icon: Calendar, 
+      roles: ['admin', 'direccion'] 
+    },
+    // 👆 FIN DE NUEVA OPCIÓN 👆
+    { 
+      name: 'Usuarios', 
+      href: '/admin/usuarios', 
+      icon: Users, 
+      roles: ['admin'] 
+    },
+  ];
 
-  // SOLICITUD
-  { label: "Nuevo requerimiento", to: "/nueva", roles: ["solicitud", "admin"] },
-  { label: "Mis requisiciones", to: "/mis-requisiciones", roles: ["solicitud", "admin"] },
+  const userInitials = user?.email?.substring(0, 2).toUpperCase() || 'UB';
 
-  // REVISIÓN
-  { label: "Bandeja de Entrada", to: "/revision/requisiciones", roles: ["revision", "admin"] },
+  // Etiquetas de rol
+  const getRoleLabel = (r: string) => {
+    if (r === 'admin') return 'Administrador';
+    if (r === 'revision') return 'Revisor'; 
+    if (r === 'autorizacion') return 'Autorización';
+    if (r === 'direccion') return 'Dirección';
+    if (r === 'almacen') return 'Almacén'; 
+    return 'Solicitante';
+  };
 
-  // COMÚN
-  { label: "Notificaciones", to: "/notificaciones", roles: ["solicitud", "revision", "admin", "direccion"] },
-];
+  const currentNav = navigation.filter(item => item.roles.includes(role || ''));
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const { user, role, logout } = useSession();
-  const { notificaciones } = useNotificaciones();
-  const navigate = useNavigate();
-
-  // Filtrar ítems según el rol del usuario
-  const items = NAV_ITEMS.filter((item) => role && item.roles.includes(role));
-
-  // Contador de notificaciones no leídas (Badge)
-  const countPendientes = notificaciones.filter(n => {
-      if (n.leida) return false;
-      if (role === 'admin') return true;
-      if (role === 'revision') return n.targetRole === 'revision';
-      if (role === 'solicitud') return n.targetRole === 'solicitud' || !n.targetRole;
-      return false;
-  }).length;
-
-  const mostrarNotificaciones = role === "solicitud" || role === "revision" || role === "admin" || role === "direccion";
+  // --- LÓGICA AGREGADA: Verificar si es admin ---
+  const isAdmin = role === 'admin';
+  // ---------------------------------------------
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* SIDEBAR (Fijo a la izquierda) */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex md:flex-col z-40 shadow-sm fixed h-full">
-        <div className="px-4 py-6 border-b border-gray-100 flex justify-center shrink-0">
-          {/* LOGO OFICIALÍA (Ruta relativa corregida) */}
-          <img src="./oficialia.jpeg" alt="Oficialía" className="h-14 object-contain" />
-        </div>
+    <React.Fragment>
+      <CambioPasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
+      
+      <div className="flex h-screen bg-surface">
+        
+        {/* Sidebar Móvil Overlay */}
+        {sidebarOpen && (
+          <div className="fixed inset-0 z-40 bg-black/50 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setSidebarOpen(false)} />
+        )}
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `block text-sm font-medium rounded-lg px-3 py-2 text-left transition-colors ${
-                  isActive ? "bg-gray-900 text-white shadow-md" : "text-gray-700 hover:bg-gray-100"
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Footer del Sidebar (Usuario y Cerrar Sesión) */}
-        <div className="px-4 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-            <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Sesión iniciada como:</div>
-            <div className="font-bold text-sm text-gray-800 truncate mb-0.5" title={user?.email}>
-                {user?.email}
+        {/* Sidebar */}
+        <aside className={`
+          fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 shadow-xl md:shadow-none
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}>
+          <div className="h-full flex flex-col">
+            {/* Logo Area */}
+            <div className="h-16 flex items-center justify-center border-b border-gray-100 bg-white">
+               {/* TU LOGO ORIGINAL */}
+               <div className="flex items-center gap-2">
+                 <img src="/logo-tapachula.jpeg" alt="Logo" className="h-10 w-auto object-contain" />
+               </div>
             </div>
-            {user?.organo && (
-                <div className="text-xs text-blue-600 font-medium mb-3 truncate" title={user.organo}>
-                    {user.organo}
-                </div>
-            )}
-            
-            <button
+
+            {/* Navigation */}
+            <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+              {currentNav.map((item) => {
+                const isActive = location.pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`
+                      flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 group
+                      ${isActive 
+                        ? 'bg-[var(--color-brand)] text-white shadow-md shadow-brand/20' 
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-[var(--color-brand)]'
+                      }
+                    `}
+                  >
+                    <item.icon size={20} className={isActive ? 'text-white' : 'text-gray-400 group-hover:text-[var(--color-brand)]'} />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* User Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+              <button 
                 onClick={logout}
-                className="w-full text-xs font-semibold py-2 rounded-lg bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all shadow-sm flex items-center justify-center gap-2"
-            >
-                <span>🚪</span> Cerrar sesión
-            </button>
-        </div>
-      </aside>
-
-      {/* ÁREA PRINCIPAL (Compensada con margen izquierdo) */}
-      <div className="flex-1 flex flex-col min-w-0 md:ml-64 transition-all duration-300">
-        {/* HEADER SUPERIOR */}
-        <header className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            
-            <div className="flex items-center gap-3">
-                {/* LOGO TAPACHULA (Ruta relativa corregida) */}
-                <img src="./logo-tapachula.jpeg" alt="Logo" className="h-10 w-10 rounded-full border border-gray-100 object-cover" />
-                <div>
-                    <h1 className="text-sm md:text-base font-bold text-gray-800 leading-tight hidden sm:block">
-                        Sistema de Requerimientos
-                    </h1>
-                    <p className="text-[10px] md:text-xs text-gray-500">
-                        Ayuntamiento 2024–2027
-                    </p>
-                </div>
-            </div>
-
-            <div className="flex items-center gap-4 text-xs">
-              {mostrarNotificaciones && (
-                <button
-                  onClick={() => navigate("/notificaciones")}
-                  className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors border border-transparent hover:border-gray-200"
-                  title="Ver notificaciones"
-                >
-                  <span className="text-xl">🔔</span>
-                  {countPendientes > 0 && (
-                    <span className="absolute top-0 right-0 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center border border-white shadow-sm">
-                      {countPendientes}
-                    </span>
-                  )}
-                </button>
-              )}
-
-              <div className="text-right border-l border-gray-300 pl-4 hidden sm:block">
-                <div className="font-bold text-gray-800 truncate max-w-[200px]" title={user?.organo}>
-                    {user?.organo || "Cargando..."}
-                </div>
-                <div className="text-gray-500 text-[10px]">{user?.titular}</div>
-                <div className="text-[10px] uppercase text-blue-600 font-bold tracking-wider">{role}</div>
-              </div>
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-gray-600 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors"
+              >
+                <LogOut size={20} />
+                Cerrar Sesión
+              </button>
             </div>
           </div>
-        </header>
+        </aside>
 
-        {/* CONTENIDO DE LA PÁGINA */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
-            <div className="max-w-6xl mx-auto pb-10">
-                {children}
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-surface">
+          {/* Topbar */}
+          <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 shadow-sm z-30">
+            <button 
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+            >
+              <Menu size={24} />
+            </button>
+
+            <div className="flex-1 flex justify-end items-center gap-4 md:gap-6">
+              
+              {/* Notificaciones (TU CÓDIGO ORIGINAL) */}
+              <Link to="/notificaciones" className="relative p-2 text-gray-400 hover:text-[var(--color-brand)] hover:bg-gray-50 rounded-full transition-all">
+                <BellRing size={22} />
+                {pendientes > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+                )}
+              </Link>
+
+              <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+
+              {/* Perfil */}
+              <div className="flex items-center gap-3 pl-2">
+                <div className="hidden md:flex flex-col items-end">
+                  <span className="text-sm font-bold text-gray-800 leading-tight">
+                    {user?.email || 'Usuario'}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-brand)] tracking-wider">
+                    {getRoleLabel(role || '')}
+                  </span>
+                </div>
+
+                {/* --- BOTÓN DE PERFIL MODIFICADO CON LÓGICA DE ADMIN --- */}
+                <div className="relative group">
+                   <button 
+                     onClick={() => isAdmin && setIsPasswordModalOpen(true)}
+                     className={`w-9 h-9 rounded-full bg-[var(--color-brand)] text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white transition-all relative overflow-hidden 
+                        ${isAdmin ? "hover:ring-[var(--color-brand)]/50 cursor-pointer group-hover:scale-105" : "cursor-default"}`}
+                     title={isAdmin ? "Clic para cambiar contraseña" : "Usuario conectado"}
+                   >
+                     {/* Overlay de llave solo si es Admin */}
+                     {isAdmin && (
+                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <KeyRound size={14} className="text-white" />
+                         </div>
+                     )}
+                     
+                     {/* Texto/Iniciales: Se oculta al hacer hover SOLO si es admin */}
+                     <span className={isAdmin ? "group-hover:opacity-0 transition-opacity" : ""}>
+                        {userInitials}
+                     </span>
+                   </button>
+                </div>
+                {/* ----------------------------------------------------- */}
+                
+              </div>
+
             </div>
-        </main>
+          </header>
+
+          <main className="flex-1 overflow-auto p-4 md:p-8">
+            <div className="max-w-6xl mx-auto animate-fade-in">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </React.Fragment>
   );
 }

@@ -1,19 +1,54 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colores institucionales */
-  --color-brand: #8A1E23;        /* Borgoña */
-  --color-brand-700: #6E161A;    /* Borgoña oscuro */
-  --color-accent: #DCA116;       /* Dorado */
-  --color-ink: #2F2F2F;
+  /* Paleta Institucional */
+  --color-brand: #8B1E3F;      /* Guinda Institucional (Ajustar según logo) */
+  --color-brand-dark: #65122D; /* Tono oscuro para hover/active */
+  --color-gold: #D4AF37;       /* Dorado para acentos */
+  --color-gold-light: #F3E5AB;
+  
+  /* Semánticos */
+  --color-surface: #F8FAFC;    /* Fondo general (Slate-50) */
+  --color-ink: #0F172A;        /* Texto principal (Slate-900) */
+  --color-ink-light: #64748B;  /* Texto secundario (Slate-500) */
+  
+  /* Estados */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+}
 
-  /* Grises UI */
-  --color-surface: #FFFFFF;
-  --color-border: #D9D9D9;
-  --color-bg: #F5F6F7;
+/* Reset y Base */
+html, body {
+  @apply h-full bg-surface text-ink antialiased;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
 
-  /* Tokens UI */
-  --shadow-card: 0 2px 10px rgba(0,0,0,.06);
-  --radius-xl: 14px;
-  --radius-2xl: 20px;
+#root {
+  @apply h-full flex flex-col;
+}
+
+/* Scrollbar personalizada sutil */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* Utilidades de animación */
+.fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
