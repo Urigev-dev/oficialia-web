@@ -95,9 +95,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => unsubscribeAuth();
   }, []);
 
-  // 2. CARGA DE TODOS LOS USUARIOS (Solo para Admin)
+  // 2. CARGA DE TODOS LOS USUARIOS (Para Admin y Dirección)
   useEffect(() => {
-    if (role !== "admin") {
+    // 👇 CAMBIO AQUÍ: Permitimos a "admin" y a "direccion" descargar la lista 👇
+    if (role !== "admin" && role !== "direccion") {
       setAllUsers([]);
       return;
     }
