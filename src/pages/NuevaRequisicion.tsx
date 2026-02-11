@@ -312,6 +312,13 @@ export default function NuevaRequisicion() {
   const conceptosDisponibles = selectedCapitulo ? Object.keys(CATEGORIAS[selectedCapitulo] || {}) : [];
   const partidasDisponibles = (selectedCapitulo && formData.tipoMaterial) ? CATEGORIAS[selectedCapitulo][formData.tipoMaterial] || [] : [];
 
+  // --- NUEVA LÓGICA: PERMISO DE ENVÍO POR CORRECCIÓN ---
+  // Si tiene un ID y contiene notas de revisión, significa que el revisor lo devolvió para corrección.
+  const esCorreccion = Boolean(editId && reqOriginal?.revisionNotas);
+  
+  // El usuario puede enviar SI está dentro de los 5 días hábiles O SI es una corrección solicitada.
+  const envioPermitido = puedeEnviar || esCorreccion;
+
   return (
     <React.Fragment>
       <ConfirmModal 
@@ -514,7 +521,7 @@ export default function NuevaRequisicion() {
           </section>
 
           {/* 👉 4. NUEVA BARRA DE BOTONES CON BANNER INFORMATIVO */}
-          {!puedeEnviar && !loadingConfig && (
+          {!envioPermitido && !loadingConfig && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-start gap-3 mt-4 mb-2 animate-fade-in">
               <Info className="shrink-0 mt-0.5" size={20} />
               <div className="text-sm">
@@ -534,7 +541,7 @@ export default function NuevaRequisicion() {
               loading={loading} 
               onClick={() => handleSubmit(true)} 
               icon={Send} 
-              disabled={loading || loadingConfig || !puedeEnviar}
+              disabled={loading || loadingConfig || !envioPermitido}
             >
               Enviar Solicitud
             </Button>

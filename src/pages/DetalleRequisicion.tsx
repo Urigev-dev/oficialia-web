@@ -122,8 +122,18 @@ export default function DetalleRequisicion() {
   const enEntrega = req.estado === 'material_entregado'; 
   const enFinalizada = req.estado === 'finalizada';
 
-  // NUEVO: Validación para permitir imprimir el formato solo en etapas avanzadas
-  const permiteImprimirFormato = ['suficiencia', 'autorizada', 'material_entregado', 'finalizada'].includes(req.estado);
+  // --- NUEVO: VALIDACIÓN DIFERENCIADA PARA IMPRIMIR FORMATO ---
+  const etapasAvanzadas = ['suficiencia', 'autorizada', 'material_entregado', 'finalizada'];
+  
+  let permiteImprimirFormato = false;
+  if (isRevisor || isAutorizador) {
+      // Revisores, Dirección y Admin pueden ver el botón desde que entra a revisión
+      permiteImprimirFormato = ['en_revision', 'cotizacion', 'rechazada', ...etapasAvanzadas].includes(req.estado);
+  } else {
+      // Los solicitantes SOLO lo ven a partir de suficiencia
+      permiteImprimirFormato = etapasAvanzadas.includes(req.estado);
+  }
+  // ------------------------------------------------------------
 
   const soyElRevisor = req.revisandoPor?.uid === user?.uid;
   const sinAsignar = !req.revisandoPor?.uid;
